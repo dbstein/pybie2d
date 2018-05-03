@@ -1,14 +1,5 @@
-try:
-	from pyfmmlib2d import FMM
-	have_fmm = True
-except:
-	have_fmm = False
+from . import laplace
 
-from . import backend_defaults
-from . import misc
-from . import kernels
-from . import boundaries
-from . import targets
 # from ._laplace_kernels import Laplace_DLP
 # from ._laplace_kernels import Laplace_SLP
 # from ._laplace_kernels import Laplace_Far_Apply

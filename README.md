@@ -1,5 +1,5 @@
 # pyBIE2D: Python Tools for Boundary Integral Equations in 2D
- ---
+ 
 The goal of this project is to provide tools in python for solving the Laplace and Stokes problems in two dimensions, modeled after Alex Barnett's package BIE2D for MATLAB available at: https://github.com/ahbarnett/BIE2D.
 
 This project is in a very early state. For now, the only things implemented are:
