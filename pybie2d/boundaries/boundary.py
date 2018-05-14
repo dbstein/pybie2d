@@ -1,8 +1,10 @@
 import numpy as np
 import scipy as sp
 import scipy.spatial
+from ..point_set import PointSet
+from ..misc.interior_points import find_interior_points
 
-class Boundary(object):
+class Boundary(PointSet):
     """
     Parent class for all "Boundaries"
     This class should never be used directly
@@ -12,8 +14,6 @@ class Boundary(object):
         compute_quadrature:
             the workhorse for this class - computes quadrature nodes and weights
             must be provided by child class!
-        compute_tree:
-            computes a kdtree for the physical nodes of the boundary
     """
     def __init__(self):
         self.target_set = False
@@ -30,11 +30,9 @@ class Boundary(object):
         else:
             self.quadrature_computed = False
 
+        self.tree_computed = False
         if compute_tree:
             self.compute_tree()
-            self.tree_computed = True
-        else:
-            self.tree_computed = False
     # end __init__2 function definition
 
     def compute_quadrature(self):
@@ -42,11 +40,14 @@ class Boundary(object):
                 by the child subclass of type Boundary")
     # end compute_quadrature function
 
-    def compute_tree(self):
+    def find_interior_points(self, target):
         """
-        Compute a kd-tree based on the coordinate values
+        Computes interior/exterior points via cauchy sum +
+        brute force search near to boundary, using matplotlib.path
+        and treating the boundary as a discrete polygon
+        for the brute force search
+
+        if the boundary type has a simple way to deal with this,
+        this method should probably be overwritten by the child class!
         """
-        bdy = np.column_stack([self.x, self.y])
-        self.tree = sp.spatial.cKDTree(bdy)
-        self.tree_computed = True
-    # end compute_tree function definition
+        return find_interior_points(self, target)

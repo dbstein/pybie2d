@@ -2,23 +2,20 @@ import numpy as np
 import scipy as sp
 import scipy.spatial
 
-class Target(object):
+class PointSet(object):
     """
-    This class impelements a "target" for use in
-    Boundary Integral methods
+    This class impelements a "Point Set"
 
     Instantiation: see documentation to self.__init__()
         note that compute_tree method is called by default in the instantiation
-        if you have fairly simple needs, you should turn this off
     Methods:
         compute_tree:
             computes a kdtree for the nodes of x
     """
     def __init__(   self, x=None, y=None, c=None, compute_tree=True):
         """
-        This function initializes the target element. It also computes
-        a kd-tree, by default. This computations can be turned off if speed is
-        desired and the tree isn't needed.
+        Initialize a Point Set.
+        A kd-tree is computed by default.
 
         x (optional): real vector of x-coordinates
         y (optional): real vector of y-coordinates
@@ -44,28 +41,27 @@ class Target(object):
             self.y = self.c.imag
         else:
             raise StandardError('Not enough parameters provided to define \
-                target element!')
+                Point Set.')
         self.N = self.x.shape[0]
+        self.stacked_boundary = np.column_stack([self.x, self.y])
+        self.stacked_boundary_T = self.stacked_boundary.T
+        self.tree_computed = False
         if compute_tree:
             self.compute_tree()
-            self.tree_computed = True
-        else:
-            self.tree_computed = False
-        self.stacked_boundary = np.column_stack((self.x, self.y))
-        self.stacked_boundary_T = self.stacked_boundary.T
     # end __init__ function definition
 
     def compute_tree(self):
         """
         Compute a kd-tree based on the coordinate values
         """
-        self.tree = sp.spatial.cKDTree(np.column_stack((self.x, self.y)))
-        self.tree_computed = True
+        if not self.tree_computed:
+            self.tree = sp.spatial.cKDTree(self.stacked_boundary)
+            self.tree_computed = True
     # end compute_tree function definition
 
     def reshape(self, f):
         """
-        reshape a result to the original shape of the target
+        reshape a result to the original shape of the Point Set
         """
         return f.reshape(self.shape)
     # end reshape function definition

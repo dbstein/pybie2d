@@ -12,7 +12,7 @@ if have_fmm:
 # General Purpose Source --> Target Kernel Calls
 
 def Laplace_Kernel_Apply(source, target, charge=None, dipstr=None, dipvec=None,
-                    weights=None, gradient=False, dtype=float, backend=None):
+                    weights=None, gradient=False, dtype=float, backend='fly'):
     """
     Laplace Kernel Apply (potential and gradient) in 2D
     Computes the sum:
@@ -29,8 +29,7 @@ def Laplace_Kernel_Apply(source, target, charge=None, dipstr=None, dipvec=None,
         gradient, optional, bool,          compute gradients or not
         dtype,    optional, float/complex, whether this transform is for float
                                             only, or complex densities
-        backend,  optional, str,           backend to force usage of
-                                             ('FMM' or 'numba')
+        backend,  optional, str,           'fly', 'numba', 'fmm'
 
         This function assumes that source and target have no coincident points
     """
@@ -116,7 +115,7 @@ def _Laplace_Kernel_Apply_numba_both_gradient(sx, sy, tx, ty, charge, dipstr,
 def Laplace_Kernel_Apply_numba(source, target, charge=None, dipstr=None,
                     dipvec=None, weights=None, gradient=False, dtype=float):
     weights = 1.0 if weights is None else weights
-    weights *= -0.5/np.pi
+    weighted_weights = -0.5*weights/np.pi
     sx = source[0]
     sy = source[1]
     tx = target[0]
@@ -125,10 +124,10 @@ def Laplace_Kernel_Apply_numba(source, target, charge=None, dipstr=None,
     pot = np.zeros(target.shape[1], dtype=dtype)
     if charge is not None:
         code += 1
-        ch = charge*weights
-    if dipvec is not None:
+        ch = charge*weighted_weights
+    if dipstr is not None:
         code += 2
-        ds = dipstr*weights
+        ds = dipstr*weighted_weights
         nx = dipvec[0]
         ny = dipvec[1]
     if gradient:
@@ -158,9 +157,9 @@ def Laplace_Kernel_Apply_FMM(source, target, charge=None, dipstr=None,
                     dipvec=None, weights=None, gradient=False, dtype=float):
     kind = 'laplace' if dtype is float else 'laplace-complex'
     weights = 1.0 if weights is None else weights
-    weights *= -0.5/np.pi
-    ch = charge*weights if charge is not None else None
-    ds = dipstr*weights if dipstr is not None else None
+    weighted_weights = -0.5*weights/np.pi
+    ch = charge*weighted_weights if charge is not None else None
+    ds = dipstr*weighted_weights if dipstr is not None else None
     out = FMM(kind=kind, source=source, target=target, charge=ch, dipstr=ds,
                 dipvec=dipvec, compute_target_potential=True,
                 compute_target_gradient=gradient)['target']
@@ -266,16 +265,157 @@ def Laplace_Kernel_Form(source, target, ifcharge=False, chweight=None,
         else:
             return G
 
+
+################################################################################
+# General Purpose Source --> Source Kernel Calls
+# These are naive quadratures with no self interaction!
+
+def Laplace_Kernel_Self_Apply(source, charge=None, dipstr=None, dipvec=None,
+                                    weights=None, dtype=float, backend='fly'):
+    """
+    Laplace Kernel Apply (potential) in 2D
+    Computes the sum:
+        u_i = sum_j[G_ij charge_j + (dipvec_j dot grad G_ij) dipstr_j] weights_j
+            for i != j
+    where:
+
+    Parameters:
+        source,   required, float(2, ns),  source coordinates
+        charge,   optional, dtype(ns),     charge
+        dipstr,   optional, dtype(ns),     dipole strength
+        dipvec,   optional, float(2, ns),  dipole orientations
+        weights,  optional, float(ns),     quadrature weights
+        dtype,    optional, float/complex, whether this transform is for float
+                                            only, or complex densities
+        backend,  optional, str,           'fly', 'numba', 'fmm'
+    """
+    backend = get_backend(source.shape[1], source.shape[1], backend)
+    return Laplace_Kernel_Self_Applys[backend](source, charge, dipstr,
+                                                    dipvec, weights, dtype)
+
+@numba.njit(parallel=True)
+def _Laplace_Kernel_Self_Apply_numba_charge(sx, sy, charge, pot):
+    scale = -0.5/np.pi
+    for i in numba.prange(sx.shape[0]):
+        for j in range(i):
+            dx = sx[i] - sx[j]
+            dy = sy[i] - sy[j]
+            d2 = dx**2 + dy**2
+            pot[i] += 0.5*np.log(d2)*charge[j]
+        for j in range(i+1,sx.shape[0]):
+            dx = sx[i] - sx[j]
+            dy = sy[i] - sy[j]
+            d2 = dx**2 + dy**2
+            pot[i] += 0.5*np.log(d2)*charge[j]
+@numba.njit(parallel=True)
+def _Laplace_Kernel_Self_Apply_numba_dipole(sx, sy, dipstr, nx, ny, pot):
+    for i in numba.prange(sx.shape[0]):
+        for j in range(i):
+            dx = sx[i] - sx[j]
+            dy = sy[i] - sy[j]
+            d2 = dx**2 + dy**2
+            id2 = 1.0/d2
+            n_dot_d = nx[j]*dx + ny[j]*dy
+            pot[i] -= n_dot_d*id2*dipstr[j]
+        for j in range(i+1,sx.shape[0]):
+            dx = sx[i] - sx[j]
+            dy = sy[i] - sy[j]
+            d2 = dx**2 + dy**2
+            id2 = 1.0/d2
+            n_dot_d = nx[j]*dx + ny[j]*dy
+            pot[i] -= n_dot_d*id2*dipstr[j]
+@numba.njit(parallel=True)
+def _Laplace_Kernel_Self_Apply_numba_both(sx, sy, charge, dipstr, nx, ny, pot):
+    for i in numba.prange(sx.shape[0]):
+        for j in range(i):
+            dx = sx[i] - sx[j]
+            dy = sy[i] - sy[j]
+            d2 = dx**2 + dy**2
+            id2 = 1.0/d2
+            n_dot_d = nx[j]*dx + ny[j]*dy
+            pot[i] += 0.5*np.log(d2)*charge[j]
+            pot[i] -= n_dot_d*id2*dipstr[j]
+        for j in range(i+1,sx.shape[0]):
+            dx = sx[i] - sx[j]
+            dy = sy[i] - sy[j]
+            d2 = dx**2 + dy**2
+            id2 = 1.0/d2
+            n_dot_d = nx[j]*dx + ny[j]*dy
+            pot[i] += 0.5*np.log(d2)*charge[j]
+            pot[i] -= n_dot_d*id2*dipstr[j]
+
+def Laplace_Kernel_Self_Apply_numba(source, charge=None, dipstr=None,
+                                        dipvec=None, weights=None, dtype=float):
+    weights = 1.0 if weights is None else weights
+    weighted_weights = -0.5*weights/np.pi
+    sx = source[0]
+    sy = source[1]
+    code = 0
+    pot = np.zeros(source.shape[1], dtype=dtype)
+    if charge is not None:
+        code += 1
+        ch = charge*weighted_weights
+    if dipstr is not None:
+        code += 2
+        ds = dipstr*weighted_weights
+        nx = dipvec[0]
+        ny = dipvec[1]
+    if code == 1:
+        _Laplace_Kernel_Self_Apply_numba_charge(sx, sy, ch, pot)
+    if code == 2:
+        _Laplace_Kernel_Self_Apply_numba_dipole(sx, sy, ds, nx, ny, pot)
+    if code == 3:
+        _Laplace_Kernel_Self_Apply_numba_both(sx, sy, ch, ds, nx, ny, pot)
+    return pot
+
+def Laplace_Kernel_Self_Apply_FMM(source, charge=None, dipstr=None,
+                                    dipvec=None, weights=None, dtype=float):
+    kind = 'laplace' if dtype is float else 'laplace-complex'
+    weights = 1.0 if weights is None else weights
+    weighted_weights = -0.5*weights/np.pi
+    ch = charge*weighted_weights if charge is not None else None
+    ds = dipstr*weighted_weights if dipstr is not None else None
+    out = FMM(kind=kind, source=source, charge=ch, dipstr=ds,
+                dipvec=dipvec, compute_source_potential=True)['source']
+    return out['u']
+
+Laplace_Kernel_Self_Applys = {}
+Laplace_Kernel_Self_Applys['numba'] = Laplace_Kernel_Self_Apply_numba
+Laplace_Kernel_Self_Applys['FMM']   = Laplace_Kernel_Self_Apply_FMM
+
+def Laplace_Kernel_Self_Form(source, ifcharge=False, chweight=None,
+                    ifdipole=False, dpweight=None, dipvec=None, weights=None):
+    """
+    Laplace Kernel Formation
+    Computes the matrix:
+        [ chweight*G_ij + dpweight*(n_j dot grad G_ij) ] weights_j
+        where G is the Laplace Greens function and other parameters described
+        below, and the diagonal is set to 0
+
+    Parameters:
+        source,   required, float(2, ns),  source coordinates
+        ifcharge, optional, bool,          include charge contribution
+        chweight, optional, float,         scalar weight to apply to charges
+        ifdipole, optional, bool,          include dipole contribution
+        dpweight, optional, float,         scalar weight to apply to dipoles
+        dipvec,   optional, float(2, ns),  dipole orientations
+        weights,  optional, float(ns),     quadrature weights
+    """
+    G = Laplace_Kernel_Form(source, source, ifcharge, chweight, ifdipole,
+                                            dpweight, dipvec, weights, False)
+    np.fill_diagonal(G, 0.0)
+    return G
+
 ################################################################################
 # Layer evaluation/form functions
 #     note that unlike the above functions, these take source and target
 #     not as pure coordinate arrays, but of class(boundary_element)
 
 def Laplace_Layer_Form(source, target, ifcharge=False, chweight=None,
-                    ifdipole=False, dpweight=None, gradient=False):
+                                ifdipole=False, dpweight=None, gradient=False):
     """
     Laplace Layer Evaluation (potential and gradient in 2D)
-    Handles the case where source is target, for values, but not gradients
+    Assumes that source is not target (see function Laplace_Layer_Self_Form)
 
     Parameters:
         source, required, class(boundary_element), source
@@ -294,55 +434,14 @@ def Laplace_Layer_Form(source, target, ifcharge=False, chweight=None,
         return Laplace_Kernel_Form(sourcex, targetx, ifcharge, chweight,
             ifdipole, dpweight, dipvec, weights, gradient)
     else:
-        if gradient:
-            raise Exception('Self evaluation does not currently support\
-                                    gradients.')
-        ALP = np.zeros([source.N, source.N], dtype=float)
-        if ifdipole:
-            # form the DLP Matrix
-            sourcex = source.stacked_boundary_T
-            dipvec  = source.stacked_normal_T
-            weights = source.weights
-            DLP = Laplace_Kernel_Form(sourcex, sourcex, ifdipole=True,
-                    dpweight=dpweight, dipvec=dipvec, weights=weights,
-                    gradient=gradient)
-            # fix the diagonal
-            np.fill_diagonal(DLP, -0.25*source.curvature*source.weights/np.pi)
-            ne.evaluate('ALP+DLP', out=ALP)
-        if ifcharge:
-            # form the SLP Matrix
-            # because this is singular, this depends on the type of layer itself
-            # and the SLP formation must be implemented in that class!
-            SLP = source.Self_Laplace_Layer_Form(ifcharge, chweight, ifdipole,
-                                                                    dpweight)
-            ne.evaluate('ALP+SLP', out=ALP)
-        return ALP
-
-@numba.njit(parallel=True)
-def _Laplace_Kernel_Self_Apply_DLP(sx, sy, dipstr, nx, ny, pot, curvature,
-                                                                    weights):
-    for i in numba.prange(sx.shape[0]):
-        for j in range(i):
-            dx = tx[i] - sx[j]
-            dy = ty[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] -= n_dot_d*id2*dipstr[j]
-        for j in range(i+1,sx.shape[0]):
-            dx = tx[i] - sx[j]
-            dy = ty[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] -= n_dot_d*id2*dipstr[j]
-        pot[i] -= 0.25*curvature*weights[i]/np.pi
+        raise Exception('To do source-->source evaluations, use the function \
+                                                    Laplace_Layer_Self_Form')
 
 def Laplace_Layer_Apply(source, target, charge=None, dipstr=None,
-                                                gradient=False, dtype=float):
+                                    gradient=False, dtype=float, backend='fly'):
     """
     Laplace Layer Evaluation (potential and gradient in 2D)
-    Handles the case where source is target, for values, but not gradients
+    Assumes that source is not target (see function Laplace_Layer_Self_Form)
 
     Parameters:
         source, required, class(boundary_element), source
@@ -352,6 +451,7 @@ def Laplace_Layer_Apply(source, target, charge=None, dipstr=None,
         gradient, optional, bool,          compute gradients or not
         dtype,    optional, float/complex, whether this transform is for float
                                             only, or complex densities
+        backend,  optional, str,           'fly', 'numba', 'fmm'
     """
     if source is not target:
         sourcex = source.stacked_boundary_T
@@ -359,22 +459,109 @@ def Laplace_Layer_Apply(source, target, charge=None, dipstr=None,
         dipvec  = source.stacked_normal_T if dipstr is not None else None
         weights = source.weights
         return Laplace_Kernel_Apply(sourcex, targetx, charge, dipstr, dipvec,
-                                                weights, gradient, dtype=float)
+                                weights, gradient, dtype=float, backend=backend)
     else:
-        if gradient:
-            raise Exception('Self evaluation does not currently support\
-                                    gradients.')
+        raise Exception('To do source-->source evaluations, use the function \
+                                                    Laplace_Layer_Self_Apply')
+
+################################################################################
+# Layer self evaluation/form functions
+
+def Laplace_Layer_Self_Form(source, ifcharge=False, chweight=None,
+                            ifdipole=False, dpweight=None, self_type='naive'):
+    """
+    Laplace Layer Evaluation (potential in 2D)
+
+    Parameters:
+        source, required, class(boundary_element), source
+        ifcharge, optional, bool,  include effect of charge (SLP)
+        chweight, optional, float, scalar weight for the SLP portion
+        ifdipole, optional, bool,  include effect of dipole (DLP)
+        dpweight, optional, float, scalar weight for the DLP portion
+        self_type, optional, string, 'naive' or 'singular'
+    """
+    if self_type is 'naive':
+        sourcex = source.stacked_boundary_T
+        dipvec  = source.stacked_normal_T if ifdipole else None
+        weights = source.weights
+        return Laplace_Kernel_Self_Form(source.stacked_boundary_T, ifcharge,
+                                chweight, ifdipole, dpweight, dipvec, weights)
+    else:
+        ALP = np.zeros([source.N, source.N], dtype=float)
+        if ifdipole:
+            # form the DLP Matrix
+            sourcex = source.stacked_boundary_T
+            dipvec  = source.stacked_normal_T
+            weights = source.weights
+            DLP = Laplace_Kernel_Self_Form(sourcex, ifdipole=True,
+                                                dipvec=dipvec, weights=weights)
+            # fix the diagonal
+            np.fill_diagonal(DLP, -0.25*source.curvature*source.weights/np.pi)
+            # weight, if necessary
+            if dpweight != None:
+                DLP *= dp_weight
+            ne.evaluate('ALP + DLP', out=ALP)
+        if ifcharge:
+            # form the SLP Matrix
+            # because this is singular, this depends on the type of layer itself
+            # and the SLP formation must be implemented in that class!
+            SLP = source.Laplace_SLP_Self_Form()
+            # weight, if necessary
+            if chweight != None:
+                SLP *= chweight
+            ne.evaluate('ALP + SLP', out=ALP)
+        return ALP
+
+@numba.njit(parallel=True)
+def _Laplace_Kernel_Self_Apply_DLP(sx, sy, dipstr, nx, ny, pot, curvature,
+                                                                    weights):
+    for i in numba.prange(sx.shape[0]):
+        for j in range(i):
+            dx = sx[i] - sx[j]
+            dy = sy[i] - sy[j]
+            d2 = dx**2 + dy**2
+            id2 = 1.0/d2
+            n_dot_d = nx[j]*dx + ny[j]*dy
+            pot[i] -= n_dot_d*id2*dipstr[j]
+        for j in range(i+1,sx.shape[0]):
+            dx = sx[i] - sx[j]
+            dy = sy[i] - sy[j]
+            d2 = dx**2 + dy**2
+            id2 = 1.0/d2
+            n_dot_d = nx[j]*dx + ny[j]*dy
+            pot[i] -= n_dot_d*id2*dipstr[j]
+        pot[i] -= 0.25*curvature*weights[i]/np.pi
+
+def Laplace_Layer_Self_Apply(source, charge=None, dipstr=None,
+                                dtype=float, self_type='naive', backend='fly'):
+    """
+    Laplace Layer Self Evaluation (potential in 2D)
+
+    Parameters:
+        source, required, class(boundary_element), source
+        charge,   optional, dtype(ns),     charge
+        dipstr,   optional, dtype(ns),     dipole strength
+        dtype,    optional, float/complex, whether this transform is for float
+                                            only, or complex densities
+        self_type, optional, string, 'naive' or 'singular'
+        backend,  optional, str,           'fly', 'numba', 'fmm'
+    """
+    if self_type is 'naive':
+        sourcex = source.stacked_boundary_T
+        dipvec  = source.stacked_normal_T
+        weights = source.weights
+        return Laplace_Kernel_Self_Apply(sourcex, charge, dipstr, dipvec,
+                                                    weights, dtype, backend)
+    else:
         ALP = np.zeros([source.N,], dtype=dtype)
         if ifdipole:
             # evaluate the DLP
-            sx = source.x
-            sy = source.y
-            nx = source.nx
-            ny = source.ny
-            curvature = source.curvature
+            sourcex = source.stacked_boundary_T
+            dipvec  = source.stacked_normal_T
             weights = source.weights
-            uDLP = _Laplace_Kernel_Self_Apply_DLP(sx, sy, dipstr, nx, ny, pot,
-                                                            curvature, weights)
+            uDLP = Laplace_Kernel_Self_Apply(sourcex, dipstr=dipstr,
+                dipvec=dipvec, weights=weights, dtype=dtype, backend=backend)
+            uDLP -= 0.25*source.curvature*weights/np.pi
         if ifcharge:
             # form the SLP Matrix
             # because this is singular, this depends on the type of layer itself
@@ -383,6 +570,4 @@ def Laplace_Layer_Apply(source, target, charge=None, dipstr=None,
                                                                 dpweight, dtype)
             ne.evaluate('uALP+uSLP', out=uALP)
         return uALP
-
-
 

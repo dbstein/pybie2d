@@ -5,9 +5,17 @@ import scipy.signal
 import numexpr as ne
 import warnings
 import os
+import numba
 
-from ..misc.basic_functions import interpolate_to_p, differentiate, differentiation_matrix
+from ..misc.basic_functions import interpolate_to_p, differentiate, \
+                differentiation_matrix, apply_circulant_matrix
 from .boundary import Boundary
+from ..kernels.laplace import Laplace_Layer_Form, Laplace_Layer_Apply, \
+                            Laplace_Layer_Self_Form, Laplace_Layer_Self_Apply
+from ..kernels.cauchy import Cauchy_Layer_Form, Cauchy_Layer_Apply
+from .. import have_fmm
+if have_fmm:
+    from .. import FMM
 
 class Global_Smooth_Boundary(Boundary):
     """
@@ -28,11 +36,16 @@ class Global_Smooth_Boundary(Boundary):
                     c_func=None, xp_func=None, yp_func=None, cp_func=None,
                     xpp_func=None, ypp_func=None, cpp_func=None, N=None,
                     inside_point=None, compute_quadrature=True,
-                    compute_tree=True, self_type='kress'):
+                    compute_tree=True, compute_differentiation_matrix=True,
+                    self_type='kress'):
         """
-        This function initializes the boundary element. It also computes
-        quadrature elements and a kd-tree, by default. These computations can
-        be turned off if speed is desired and they aren't needed.
+        This function initializes the boundary element.
+        It also computes, by default:
+            quadrature
+            kd-tree
+            kress matrices for quickly applying kress quadratures
+            a differentiation matrix
+        These computations can be turned off if they aren't needed
 
         x (optional): real vector of x-coordinates
         y (optional): real vector of y-coordinates
@@ -89,7 +102,9 @@ class Global_Smooth_Boundary(Boundary):
         use_functions = N_available and functions_available
 
         self.extras =   {   'compute_quadrature' : compute_quadrature,
-                            'compute_tree' : compute_tree,
+                            'compute_tree'       : compute_tree,
+                            'compute_differentiation_matrix' : \
+                                        compute_differentiation_matrix,
                         }
 
         if use_functions:
@@ -259,6 +274,39 @@ class Global_Smooth_Boundary(Boundary):
         self.ny = self.normal_y
         self.cpn = self.scaled_cp
         self.spn = self.scaled_speed
+        # vectors to be used to speed up Kress/CSLP Routines
+        v1 = 4.0*np.sin(np.pi*np.arange(self.N)/self.N)**2
+        v1[0] = 1.0
+        self.Kress_V1 = 0.5*np.log(v1)*self.N/(2*np.pi)
+        self.Kress_V1_hat = np.fft.fft(self.Kress_V1)
+        v2 = np.abs(np.fft.fftfreq(self.N, 1.0/self.N))
+        v2[0] = np.Inf
+        IV = 1.0/v2
+        self.Kress_V2 = 0.5*np.fft.ifft(IV).real*self.N/(2*np.pi)
+        self.Kress_V2_hat = 0.5*IV*self.N/(2*np.pi)
+        self.Kress_V_hat = self.Kress_V1_hat/self.N + self.Kress_V2_hat
+        self.Kress_V = self.Kress_V1/self.N + self.Kress_V2
+        RVe = IV.copy()
+        RVe[int(self.N/2)+1:] = 0.0
+        RVe[int(self.N/2)] /= 2
+        RVi = IV.copy()
+        RVi[:int(self.N/2)] = 0.0
+        # notice the switch here of i/e things
+        # this prevents the transposition/conj in my old code                                   older code)
+        self.Kress_VRe = np.fft.ifft(RVi)
+        self.Kress_VRi = np.fft.ifft(RVe)
+        self.Kress_VRe_hat = RVi
+        self.Kress_VRi_hat = RVe
+        self.Kress_x = np.cos(self.t) + 1j*np.sin(self.t)
+        self.CSLP_limit =  np.log(1j*self.Kress_x/self.cp) * \
+                                            self.weights/(2*np.pi)
+        self.sawlog = -1j*self.t + np.log(self.inside_point_c - self.c)
+        self.sawlog.imag = np.unwrap(self.sawlog.imag)
+        self.inf_scale = self.complex_weights/(self.c-self.inside_point_c) \
+                                                                / (2.0j*np.pi)
+        if self.extras['compute_differentiation_matrix']:
+            # some extra matrices used to speed up setting up close evals
+            self.differentiation_matrix = differentiation_matrix(self.N)
     # end compute_quadrature function definition
 
     # self quadrature (apply) for Laplace SLP
@@ -269,7 +317,7 @@ class Global_Smooth_Boundary(Boundary):
         Inputs:
             tau,    required, dtype(ns): density (dtype can be float or complex)
         """
-        return _Laplace_SLP_Self_Kress_Apply(self.x, self.y, self.speed, tau)
+        return Laplace_SLP_Self_Kress_Apply(self.x, self.y, self.speed, tau)
     # end Laplace_SLP_Self_Apply function definition
 
     # self quadrature (form) for Laplace SLP
@@ -278,8 +326,33 @@ class Global_Smooth_Boundary(Boundary):
         Form Laplace SLP self-interaction matrix
             (and normal derivative matrix, if requested)
         """
-        return _Laplace_SLP_Self_Kress_Form(self.x, self.y, self.speed)
+        return Laplace_SLP_Self_Kress_Form(self)
     # end Laplace_SLP_Self_Apply function definition
+
+    ###### Method for generating close corrections
+    def tolerance_to_distance(self, tol):
+        """
+        Given error tolerance, finds distance where close evaluation is needed
+        """
+        return -np.log(tol)*self.max_h/4.5
+
+    def Get_Close_Correction_Function(self, target, side, do_DLP, DLP_weight,
+                                        do_SLP, SLP_weight, kernel, backend):
+        """
+        Given target, kernel, and type ('preformed', 'fly', 'numba', or 'fmm'),
+
+        Returns a dictionary 'preparation'
+        And a function that takes as parameters tau, preparation that
+        is repsonsible for the close correction
+
+        Note that this does not check if target points need close evaluation!
+        """
+        if kernel is 'laplace':
+            return Get_Laplace_Close_Correction_Function(self, target, side,
+                            do_DLP, DLP_weight, do_SLP, SLP_weight, backend)
+        else:
+            raise Exception('Close evaluation for the selected kernel has not \
+                                                        yet been implemented.')
 
     #########################
     #### Private Methods ####
@@ -301,38 +374,373 @@ class Global_Smooth_Boundary(Boundary):
 #### Kress Self-Evaluation routines for Laplace SLP ############################
 ################################################################################
 
-def _Laplace_SLP_Self_Kress_Form(sx, sy, speed):
-    """
-    sx,    required, float(ns), x-coordinates
-    sy,    required, float(ns), y-coordinates
-    speed, required, float(ns), speed of discretization
-    """
-    N = sx.shape[0]
-    sxt = sx[:,None]
-    syt = sy[:,None]
-    dx = ne.evaluate('sxt - sx')
-    dy = ne.evaluate('syt - sy')
-    d2 = dx**2 + dy**2
-    sw = -speed/N
-    C = sp.linalg.circulant(0.5*np.log(4.0*np.sin(np.pi*np.arange(N)/N)**2))
-    A = ne.evaluate('-0.5*log(d2) + C')
-    np.fill_diagonal(A, -np.log(speed))
-    V1 = 1.0/np.arange(1,int(N/2)+1)
-    V = np.concatenate([ (0.0,), V1, V1[:-1][::-1] ])
-    IV = 0.5*np.fft.ifft(V).real
-    C = sp.linalg.circulant(IV)
-    return ne.evaluate('(A/N + C)*speed')
+def Laplace_SLP_Self_Kress_Form(source):
+    # requires the function forming the matrices Kress_C to have been called
+    weights = source.weights
+    C = sp.linalg.circulant(source.Kress_V)
+    A = Laplace_Layer_Self_Form(source, ifcharge=True, self_type='naive')
+    np.fill_diagonal(A, -np.log(source.speed)/(2*np.pi)*weights)
+    return ne.evaluate('A + C*weights')
 
-def _Laplace_SLP_Self_Kress_Apply(sx, sy, speed, tau):
+def Laplace_SLP_Self_Kress_Apply(source, tau, backend='fly'):
     """
-    sx,    required, float(ns), x-coordinates
-    sy,    required, float(ns), y-coordinates
-    speed, required, float(ns), speed of discretization
+    source, required, global_smooth_boundary, source
     tau,   required, dtype(ns), density
 
     for now, just form the matrix and apply it
-    this should be recoded using numba
+    this should be recoded using numba and FFTs for applying the circulant mats
     """
-    A = _Laplace_SLP_Self_Kress_Form
-    return A.dot(tau)
+    weighted_tau = tau*source.weights
+    u1 = Laplace_Layer_Self_Apply(source, charge=tau, backend=backend)
+    u1 -= np.log(source.speed)/(2*np.pi)*weighted_tau
+    u2 = apply_circulant_matrix(weighted_tau, c_hat=source.Kress_V_hat,
+                                                                real_it=True)
+    return u1 + u2
+
+################################################################################
+#### Cauchy Compensated Evaluation                       #######################
+#### Functions compatible with Close_Corrector interface #######################
+################################################################################
+
+# note that this function is somewhat more complex than it might seem to be
+# this is to avoid forming the differentiation matrix, since
+# the differentiate function gives better error than applying the
+# differentiation matrix itself
+def _Laplace_Close_Correction_Function_Preformed(tau, preparation):
+    w = np.zeros(tau.shape, dtype=complex)
+    if preparation['do_DLP']:
+        D = preparation['dlp_pre_mat'].dot(tau)
+        D += preparation['dlp_c1']*differentiate(tau)
+        D += preparation['dlp_c2']*tau
+        w += D
+    if preparation['do_SLP']:
+        S = preparation['slp_pre_mat'].dot(tau)
+        w += S
+    v = preparation['cauchy_mat'].dot(w)
+    if preparation['do_SLP']:
+        v += preparation['slp_post_mat'].dot(tau)
+    return v.real - preparation['naive_mat'].dot(tau)
+
+def _Laplace_Close_Correction_Function_Full_Preformed(tau, preparation):
+    return preparation['correction_mat'].dot(tau)
+
+def _Laplace_Close_Correction_Function_Fly(tau, preparation):
+    v1 = Compensated_Laplace_Apply(
+            source     = preparation['source'],
+            target     = preparation['target'],
+            side       = preparation['side'],
+            tau        = tau,
+            do_DLP     = preparation['do_DLP'], 
+            DLP_weight = preparation['DLP_weight'],
+            do_SLP     = preparation['do_SLP'], 
+            SLP_weight = preparation['SLP_weight'],
+            backend    = preparation['backend']
+        )
+    ch_adj = 1.0 if preparation['SLP_weight'] is None \
+                                    else preparation['SLP_weight']
+    ds_adj = 1.0 if preparation['DLP_weight'] is None \
+                                    else preparation['DLP_weight']
+    ch = tau*ch_adj*int(preparation['do_SLP'])
+    ds = tau*ds_adj*int(preparation['do_DLP'])
+    v2 = Laplace_Layer_Apply(
+            source     = preparation['source'],
+            target     = preparation['target'],
+            charge     = ch,
+            dipstr     = ds,
+            backend    = preparation['backend']
+        )
+    return v1.real - v2
+
+def Get_Laplace_Close_Correction_Function(source, target, side, do_DLP,
+                                    DLP_weight, do_SLP, SLP_weight, backend):
+    if backend == 'preformed':
+        mats = Compensated_Laplace_Form(source, target, side, do_DLP, 
+                                                DLP_weight, do_SLP, SLP_weight)
+        naive_mat = Laplace_Layer_Form(source, target, ifcharge=do_SLP,
+                    chweight=SLP_weight, ifdipole=do_DLP, dpweight=DLP_weight)
+        preparation = {
+            'do_DLP'       : do_DLP,
+            'do_SLP'       : do_SLP,
+            'dlp_pre_mat'  : mats[0],
+            'dlp_c1'       : mats[1],
+            'dlp_c2'       : mats[2],
+            'cauchy_mat'   : mats[3],
+            'slp_pre_mat'  : mats[4],
+            'slp_post_mat' : mats[5],
+            'naive_mat'    : naive_mat,
+        }
+        return preparation, _Laplace_Close_Correction_Function_Preformed
+    elif backend == 'full preformed':
+        close_mat = Compensated_Laplace_Full_Form(source, target, side, do_DLP, 
+                                                DLP_weight, do_SLP, SLP_weight)
+        naive_mat = Laplace_Layer_Form(source, target, ifcharge=do_SLP,
+                    chweight=SLP_weight, ifdipole=do_DLP, dpweight=DLP_weight)
+        correction_mat = close_mat.real - naive_mat
+        preparation = {
+            'do_DLP'         : do_DLP,
+            'do_SLP'         : do_SLP,
+            'correction_mat' : correction_mat,
+        }
+        return preparation, _Laplace_Close_Correction_Function_Full_Preformed
+    else:
+        preparation = {
+            'source'       : source,
+            'target'       : target,
+            'side'         : side,
+            'do_DLP'       : do_DLP,
+            'do_SLP'       : do_SLP,
+            'DLP_weight'   : DLP_weight,
+            'SLP_weight'   : SLP_weight,
+            'backend'      : backend,
+        }
+        return preparation, _Laplace_Close_Correction_Function_Fly
+
+################################################################################
+#### Cauchy Compensated Evaluation - User Facing Functions #####################
+################################################################################
+
+def Compensated_Laplace_Full_Form(source, target, side, do_DLP=False,
+                DLP_weight=None, do_SLP=False, SLP_weight=None, gradient=False):
+    N = source.N
+    M = target.N
+    PM = np.zeros([N, N], dtype=complex)
+    if do_DLP:
+        DPM = compensated_laplace_dlp_full_preform(source, side)
+        if DLP_weight is not None:
+            DPM *= DLP_weight
+        PM += DPM
+    if do_SLP:
+        SPM, AFTER_MATS = compensated_laplace_slp_preform(source, target, side)
+        if gradient:
+            AFTER_MAT = AFTER_MATS[0]
+            AFTER_DER_MAT = AFTER_MATS[1]
+        else:
+            AFTER_MAT = AFTER_MATS
+        if SLP_weight is not None:
+            SPM *= SLP_weight
+            AFTER_MAT *= SLP_weight
+            if gradient:
+                AFTER_DER_MAT *= SLP_weight
+        PM += SPM
+    cauchy_mats = compensated_cauchy_form(source, target, side,
+                                                        derivative=gradient)
+    if gradient:
+        cauchy_mat = cauchy_mats[0]
+        der_cauchy_mat = cauchy_mats[1]
+    else:
+        cauchy_mat = cauchy_mats
+    MAT1 = cauchy_mat.dot(PM)
+    if gradient:
+        der_cauchy_mat = cauchy_mats[1]
+        MATD = der_cauchy_mat.dot(PM)
+    if do_SLP:
+        MAT1 += AFTER_MAT
+        if gradient:
+            MATD += AFTER_DER_MAT
+    ret = (MAT1, MATD) if gradient else MAT1
+    return ret
+
+def Compensated_Laplace_Form(source, target, side, do_DLP=False,
+                DLP_weight=None, do_SLP=False, SLP_weight=None):
+    N = source.N
+    M = target.N
+    if do_DLP:
+        dlp_pre_mat, dlp_c1, dlp_c2 = \
+            compensated_laplace_dlp_preform(source, side)
+        if DLP_weight is not None:
+            dlp_pre_mat *= DLP_weight
+            dlp_c1      *= DLP_weight
+            dlp_c2      *= DLP_weight
+    else:
+        dlp_pre_mat, dlp_c1, dlp_c2 = None, None, None
+    if do_SLP:
+        slp_pre_mat, slp_post_mat = compensated_laplace_slp_preform(source,
+                                                                target, side)
+        if SLP_weight is not None:
+            slp_pre_mat  *= SLP_weight
+            slp_post_mat *= SLP_weight
+    else:
+        slp_pre_mat, slp_post_mat = None, None
+    cauchy_mat = compensated_cauchy_form(source, target, side,
+                                                        derivative=False)
+    return dlp_pre_mat, dlp_c1, dlp_c2, cauchy_mat, slp_pre_mat, slp_post_mat
+
+def Compensated_Laplace_Apply(source, target, side, tau, do_DLP=False,
+                DLP_weight=None, do_SLP=False, SLP_weight=None, backend='fly'):
+    N = source.N
+    M = target.N
+    vb = np.zeros(source.N, dtype=complex)
+    if do_DLP:
+        Dvb = compensated_laplace_dlp_preapply(source, side, tau,
+                                                                backend=backend)
+        if DLP_weight is not None:
+            Dvb *= DLP_weight
+        vb += Dvb
+    if do_SLP:
+        Svb, after_adj = compensated_laplace_slp_preapply(source, target, side,
+                                                                            tau)
+        if SLP_weight is not None:
+            Svb  *= SLP_weight
+            after_adj *= SLP_weight
+        vb += Svb            
+    u = compensated_cauchy_apply(source, target, side, vb, derivative=False)
+    if do_SLP:
+        u += after_adj
+    return u
+
+################################################################################
+#### Cauchy Compensated Evaluation - The Ugly Internals ########################
+################################################################################
+
+##### CSLP Matrix Form/Apply ###################################################
+def Complex_SLP_Kress_Split_Nystrom_Self_Form(source, side):
+    weights = source.weights
+    speed = source.speed
+    scaled_weights = weights/(2*np.pi)
+    source_c = source.c
+    scT = source_c[:,None]
+    kress_x = source.Kress_x
+    kress_xT = kress_x[:,None]
+    xd = ne.evaluate('kress_xT-kress_x')
+    d = ne.evaluate('scT - source_c')
+    S = ne.evaluate('log(xd/d)*scaled_weights') # appears to be no phase jumps!
+    np.fill_diagonal(S, source.CSLP_limit)
+    VR = source.Kress_VRi if side == 'i' else source.Kress_VRe
+    R = sp.linalg.circulant(VR)
+    S = ne.evaluate('S + R*speed')
+    return S
+
+@numba.njit(parallel=True)
+def _Complex_SLP_Kress_Split_Nystrom_Self_Apply_numba(s, p, tau, pot):
+    for i in range(s.shape[0]):
+        pot[i] = 0.0
+    for i in numba.prange(s.shape[0]):
+        for j in range(i):
+            ds = s[i] - s[j]
+            dp = p[i] - p[j]
+            pot[i] += np.log(dp/ds)*tau[j]
+        for j in range(i+1,s.shape[0]):
+            ds = s[i] - s[j]
+            dp = p[i] - p[j]
+            pot[i] += np.log(dp/ds)*tau[j]
+
+# there is no FMM apply of this function for now
+# since we don't know how to do the log(dp/ds) with FMM
+# or the log(dp)-log(ds) with corrections for phase jumps
+def Complex_SLP_Kress_Split_Nystrom_Self_Apply(source, side, tau):
+    u1 = np.empty_like(source.c)
+    _Complex_SLP_Kress_Split_Nystrom_Self_Apply_numba(source.c, \
+                        source.Kress_x, tau*source.weights/(2*np.pi), u1)
+    u2 = source.CSLP_limit*tau
+    circ = source.Kress_VRi_hat if side == 'i' else source.Kress_VRe_hat
+    u3 = apply_circulant_matrix(tau*source.speed, c_hat=circ, real_it=False)
+    return u1 + u2 + u3
+
+##### Compensated Cauchy Form/Apply ############################################
+def compensated_cauchy_form(source, target, side, derivative=False):
+    mysum = lambda x: x.dot(source.ones_vec)
+    sc = source.c
+    scT = sc[:,None]
+    tcT = target.c[:,None]
+    cw = source.complex_weights
+    cwT = cw[:,None]
+
+    comp = Cauchy_Layer_Form(source, target)
+    J0 = mysum(comp)
+    if side == 'e':
+        # may have to check on this for SLPs!
+        J0 += (2.0*np.pi)**2
+    prefac = 1.0/J0
+    prefacT = prefac[:,None]
+
+    MAT = ne.evaluate('prefacT*comp')
+
+    if derivative:
+        # get Schneider-Werner derivative matrix
+        DMAT = ne.evaluate('cw/(scT-sc')
+        np.fill_diagonal(DMAT, 0.0)
+        np.fill_diagonal(DMAT, -mysum(DMAT))
+        if side == 'e':
+            np.fill_diagonal(DMAT, DMAT.diagonal() - 2.0j*np.pi)
+        ne.evaluate('DMAT/cwT', out=DMAT)
+        ret = MAT, MAT.dot(DMAT)
+    else:
+        ret = MAT
+    return ret
+def compensated_cauchy_apply(source, target, side, tau, derivative=False,
+                                                                backend='fly'):
+    I0 = Cauchy_Layer_Apply(source, target, tau, backend=backend)
+    J0 = Cauchy_Layer_Apply(source, target, source.ones_vec, backend=backend)
+    if side == 'e':
+        J0 += (2.0*np.pi)**2
+    return I0/J0
+
+##### Laplace DLP Prework ######################################################
+def compensated_laplace_dlp_full_preform(source, side):
+    A1 = Cauchy_Layer_Form(source, source)
+    mysum = lambda x: x.dot(source.ones_vec)
+    np.fill_diagonal(A1, -mysum(A1))
+    scale = 1.0j/source.N
+    MAT = A1 + scale*source.differentiation_matrix
+    if side == 'i':
+        np.fill_diagonal(MAT, MAT.diagonal()-1)
+    return MAT
+
+def compensated_laplace_dlp_preform(source, side):
+    # to avoid the differentiation matrix...
+    A1 = Cauchy_Layer_Form(source, source)
+    mysum = lambda x: x.dot(source.ones_vec)
+    np.fill_diagonal(A1, -mysum(A1))
+
+    M1 = A1
+    C1 = 1.0j/source.N
+    C2 = -1.0 if side == 'i' else 0.0
+    return M1, C1, C2
+
+def compensated_laplace_dlp_preapply(source, side, tau, backend='fly'):
+    u1 = Cauchy_Layer_Apply(source, source, tau, backend=backend)
+    u2 = Cauchy_Layer_Apply(source, source, source.ones_vec, backend=backend)
+    scale = 1j/source.N
+    u = u1 - u2*tau + scale*differentiate(tau)
+    if side == 'i':
+        u -= tau
+    return u
+
+##### Laplace SLP Prework ######################################################
+def compensated_laplace_slp_preform(source, target, side):
+    # check if the CSLP Matrix was already generated
+    if not hasattr(source, 'CSLP'):
+        source.CSLP = Complex_SLP_Kress_Split_Nystrom_Self_Form(source, side)
+    if side == 'e':
+        # what gets done before cauchy
+        MAT1 = source.CSLP + source.sawlog[:,None]*(source.weights/(2.0*np.pi))
+        MAT2 = source.inf_scale.dot(MAT1)[:,None]
+        MAT = MAT1 - MAT2.T
+        # what gets done after cauchy
+        LA = np.log(np.abs(source.inside_point_c-target.c))
+        AFTER_MAT = -LA[:,None]*(source.weights/(2.0*np.pi))-MAT2.T
+    else:
+        MAT = CSLP
+        AFTER_MAT = np.zeros([target.N, source.N])
+    return MAT, AFTER_MAT
+# only one version (no FMM version...)
+def compensated_laplace_slp_preapply(source, target, side, tau):
+    # how to reliably control that this only gets done once if there
+    # are multiple apply calls? I.e. to multiple targets?
+    # can't just store it and depend on that as in the form
+    # because it may be called with different taus
+    vb = Complex_SLP_Kress_Split_Nystrom_Self_Apply(source, side, tau)
+    if side == 'e':
+        # what gets done before cauchy
+        totchgp = np.sum(source.weights*tau)/(2*np.pi)
+
+        vb += totchgp*source.sawlog
+        vinf = np.sum(source.inf_scale*vb)
+        vb -= vinf
+
+        after_adj = -totchgp*np.log(np.abs(source.inside_point_c-target.c)) - \
+                                                                        vinf
+    else:
+        after_adj = np.zeros(trg.N, dtype=complex)
+    return vb, after_adj
 

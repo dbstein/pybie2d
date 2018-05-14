@@ -1,0 +1,45 @@
+\documentclass{article}
+
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{shapes,arrows}
+\begin{document}
+\pagestyle{empty}
+
+% Define block styles
+\tikzstyle{decision} = [diamond, draw, fill=blue!20, 
+    text width=4.5em, text badly centered, node distance=3cm, inner sep=0pt]
+\tikzstyle{block} = [rectangle, draw, fill=blue!20, 
+    text width=20em, rounded corners, minimum height=4em]
+\tikzstyle{line} = [draw, -latex']
+\tikzstyle{cloud} = [draw, ellipse,fill=red!20, node distance=3cm,
+    minimum height=2em]
+
+\begin{tikzpicture}[node distance = 2cm, auto]
+    % Place nodes
+    \node [block] (PointSet)
+    	{
+    		\textbf{PointSet}\\
+    		Required elements:
+    		\begin{enumerate}[topsep=0pt,itemsep=-1ex,partopsep=1ex,parsep=1ex]
+    			\item x
+    			\item y
+    			\item c
+                \item N
+                \item stacked\_coordinates
+                \item stacked\_coordinates\_T
+    		\end{enumerate}
+            Methods:
+            \begin{enumerate}[topsep=0pt,itemsep=-1ex,partopsep=1ex,parsep=1ex]
+                \item compute\_tree
+                \item reshape
+            \end{enumerate}
+    	};
+    \node [block, below of=PointSet] (Boundary) {Boundary};
+    \node [block, below of=Boundary] (GlobalSmoothBoundary) {Global Smooth Boundary};
+    % Draw edges
+    \path [line] (PointSet) -- (Boundary);
+    \path [line] (Boundary) -- (GlobalSmoothBoundary);
+\end{tikzpicture}
+
+\end{document}

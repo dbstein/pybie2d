@@ -27,20 +27,19 @@ def configure_backend_options(numba_max=None):
     if numba_max is not None:
         backend_parameters['numba_max'] = numba_max
 
-def get_backend(n_source, n_target, backend=None):
+def get_backend(n_source, n_target, backend='fly'):
     """
     Return which computational backend to use, depending on the size of the
     kernel computation, what resources are available, and the backend requested
 
-    If backend is provided, will check if backend is one of the available
-        backends, and return the backend if available, otherwise raise an error
-    If backend is not provided:
+    If backend == 'fly':
         will return 'FMM' if n_source*n_target > backend_parameters['numba_max']
             and FMM routines are available (have_fmm==True),
         otherwise will return 'numba'
+    Otherwise: return backend
     """
     size = n_source*n_target
-    if backend is None:
+    if backend is 'fly':
         backend = get_backend_internal(size)
     else:
         if backend not in ('numba', 'FMM'):

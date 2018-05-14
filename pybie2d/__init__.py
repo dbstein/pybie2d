@@ -8,7 +8,9 @@ from . import backend_defaults
 from . import misc
 from . import kernels
 from . import boundaries
-from . import targets
+from . import point_set
+from . import close
+from . import pairing
 # from ._laplace_kernels import Laplace_DLP
 # from ._laplace_kernels import Laplace_SLP
 # from ._laplace_kernels import Laplace_Far_Apply

@@ -42,3 +42,20 @@ def differentiation_matrix(N):
     idft = dft.conjugate()/N
     k = 1j*np.fft.fftfreq(N, 1.0/N)
     return idft.dot(k[:,None]*dft)
+
+def apply_circulant_matrix(x, c=None, c_hat=None, real_it=False):
+	"""
+	computes the matrix product Cx, where C=circulant(c)
+	in O(n log n) time using FFTs
+
+	providing c_hat saves one fft
+	"""
+	if c_hat is None:
+		c_hat = np.fft.fft(c)
+	prod = np.fft.ifft(c_hat*np.fft.fft(x))
+	if real_it:
+		return prod.real
+	else:
+		return prod
+
+

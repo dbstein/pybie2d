@@ -15,10 +15,11 @@ And to give you an idea what is going on under the hood in the
 	higher level routines
 """
 
-N = 100
+N  = 600   # discretization for test grid
+NB = 600  # discretization of boundary
 
 # extract some functions for easy calling
-squish = pybie2d.misc.curve_descriptions.squished_circle
+star = pybie2d.misc.curve_descriptions.star
 GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
 PointSet = pybie2d.point_set.PointSet
 Laplace_Layer_Form = pybie2d.kernels.laplace.Laplace_Layer_Form
@@ -30,15 +31,26 @@ Find_Near_Points = pybie2d.misc.near_points.find_near_points
 Pairing = pybie2d.pairing.Pairing
 Close_Corrector = pybie2d.close.Close_Corrector
 Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Apply
+Laplace_SLP_Self_Kress_Form = pybie2d.boundaries.global_smooth_boundary.Laplace_SLP_Self_Kress_Form
+Laplace_SLP_Self_Kress_Apply = pybie2d.boundaries.global_smooth_boundary.Laplace_SLP_Self_Kress_Apply
+CSLP_Form = pybie2d.boundaries.global_smooth_boundary.Complex_SLP_Kress_Split_Nystrom_Self_Form
+CSLP_Apply = pybie2d.boundaries.global_smooth_boundary.Complex_SLP_Kress_Split_Nystrom_Self_Apply
 
 ################################################################################
 # define problem
 
 # boundary
-boundary = GSB(c=squish(N,r=2,b=0.3,rot=np.pi/4.0), compute_kress_mats=False,
-											compute_differentiation_matrix=True)
+boundary = GSB(c=star(NB,x=0,y=0,r=1.0,a=0.4,f=7,rot=np.pi/3.0),
+									compute_differentiation_matrix=True)
+
+# point at which to have a source
+pt_source_location = 0.0 + 0.0j
+pt_source_strength = 1.0
+
 # solution
-solution_func = lambda x, y: 2*x + y
+def solution_func(x, y):
+	d2 = (x-pt_source_location.real)**2 + (y-pt_source_location.imag)**2
+	return np.log(np.sqrt(d2))
 # grid on which to test solutions
 v = np.linspace(-2, 2, N, endpoint=True)
 x, y = np.meshgrid(v, v, indexing='ij')
@@ -85,22 +97,23 @@ dist = boundary.tolerance_to_distance(1e-2)
 q = Find_Near_Points(boundary, full_grid, dist).reshape(x.shape)
 # set winding number in this close region to 0
 winding_number[q] = 0.0
-# generate phys array that's good except in near boundary region
-phys = winding_number > 0.5
+# generate ext array that's good except in near boundary region
+ext = winding_number > 0.5
 # brute force search for close region using matplotlib.path
 # this should perhaps be changed to finding local coordinates via newtons method
 poly = mpl.path.Path(boundary.stacked_boundary)
 interior = poly.contains_points(np.column_stack([x[q], y[q]]))
 # fix up close region
-phys[q] = interior
+ext[q] = interior
 # get ext
-ext = np.logical_not(phys)
+phys = np.logical_not(ext)
 
 ################################################################################
 # solve for the density
 
-DLP = Laplace_Layer_Self_Form(boundary, ifdipole=True, self_type='singular')
-A = -0.5*np.eye(boundary.N) + DLP
+ALP = Laplace_Layer_Self_Form(boundary, ifcharge=True, ifdipole=True,
+														self_type='singular')
+A = 0.5*np.eye(boundary.N) + ALP
 tau = np.linalg.solve(A, bc)
 
 ################################################################################
@@ -111,7 +124,7 @@ gridp = PointSet(x[phys], y[phys])
 
 # evaluate at the target points
 u = np.zeros_like(x)
-up = Laplace_Layer_Apply(boundary, gridp, dipstr=tau, backend='FMM')
+up = Laplace_Layer_Apply(boundary, gridp, charge=tau, dipstr=tau)
 u[phys] = up
 
 err_plot(up)
@@ -125,10 +138,10 @@ close_distance = boundary.tolerance_to_distance(1e-12)
 close_pts = Find_Near_Points(boundary, gridp, r=close_distance)
 close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
 # generate close eval matrix
-close_mat = Compensated_Laplace_Full_Form(boundary, close_trg, 'i', do_DLP=True, \
-                DLP_weight=None, do_SLP=False, SLP_weight=None, gradient=False)
+close_mat = Compensated_Laplace_Full_Form(boundary, close_trg, 'e',
+								do_DLP=True, do_SLP=True, gradient=False)
 # generate naive matrix
-naive_mat = Laplace_Layer_Form(boundary, close_trg, ifdipole=True)
+naive_mat = Laplace_Layer_Form(boundary, close_trg, ifdipole=True, ifcharge=True)
 # construct close correction matrix
 correction_mat = close_mat.real - naive_mat
 
@@ -147,10 +160,10 @@ close_distance = boundary.tolerance_to_distance(1e-12)
 close_pts = Find_Near_Points(boundary, gridp, r=close_distance)
 close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
 # generate close eval matrix
-close_eval = Compensated_Laplace_Apply(boundary, close_trg, 'i', tau, \
-				do_DLP=True, DLP_weight=None, do_SLP=False, SLP_weight=None)
+close_eval = Compensated_Laplace_Apply(boundary, close_trg, 'e', tau, \
+												do_DLP=True, do_SLP=True)
 # generate naive matrix
-naive_eval = Laplace_Layer_Apply(boundary, close_trg, dipstr=tau)
+naive_eval = Laplace_Layer_Apply(boundary, close_trg, charge=tau, dipstr=tau)
 # construct close correction matrix
 correction = close_eval.real - naive_eval
 
@@ -174,8 +187,9 @@ ext2 = full_grid.reshape(ext2)
 ################################################################################
 # solve for the density
 
-DLP = Laplace_Layer_Self_Form(boundary, ifdipole=True, self_type='singular')
-A = -0.5*np.eye(boundary.N) + DLP
+ALP = Laplace_Layer_Self_Form(boundary, ifcharge=True, ifdipole=True,
+														self_type='singular')
+A = 0.5*np.eye(boundary.N) + ALP
 tau = np.linalg.solve(A, bc)
 
 ################################################################################
@@ -185,16 +199,27 @@ tau = np.linalg.solve(A, bc)
 gridp = PointSet(x[phys], y[phys])
 
 # evaluate at the target points
-up = Laplace_Layer_Apply(boundary, gridp, dipstr=tau)
+up = Laplace_Layer_Apply(boundary, gridp, charge=tau, dipstr=tau)
+
+################################################################################
+# correct with pair routines (full preformed)
+
+uph = up.copy()
+# to show how much easier the Pairing utility makes things
+pair = Pairing(boundary, gridp, 'e', 1e-12)
+code1 = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, \
+													backend='full preformed')
+pair.Close_Correction(uph, tau, code1)
+
+err_plot(uph)
 
 ################################################################################
 # correct with pair routines (preformed)
 
 uph = up.copy()
 # to show how much easier the Pairing utility makes things
-pair = Pairing(boundary, gridp, 'i', 1e-12)
-code1 = pair.Setup_Close_Corrector(do_DLP=True, backend='preformed')
-pair.Close_Correction(uph, tau, code1)
+code2 = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='preformed')
+pair.Close_Correction(uph, tau, code2)
 
 err_plot(uph)
 
@@ -203,7 +228,7 @@ err_plot(uph)
 
 uph = up.copy()
 # to show how much easier the Pairing utility makes things
-code2 = pair.Setup_Close_Corrector(do_DLP=True, backend='numba')
-pair.Close_Correction(uph, tau, code2)
+code3 = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='fly')
+pair.Close_Correction(uph, tau, code3)
 
 err_plot(uph)
