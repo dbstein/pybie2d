@@ -2,6 +2,8 @@ import numpy as np
 import scipy as sp
 import scipy.spatial
 
+from .misc.near_points import find_near_points
+
 class PointSet(object):
     """
     This class impelements a "Point Set"
@@ -65,3 +67,12 @@ class PointSet(object):
         """
         return f.reshape(self.shape)
     # end reshape function definition
+
+    def find_near_points(self, boundary, dist):
+        """
+        Finds all points in self that are within some distance of boundary
+        """
+        self.compute_tree()
+        close_pts = find_near_points(boundary, self, dist)
+        return self.reshape(close_pts)
+

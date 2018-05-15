@@ -10,7 +10,7 @@ on the value set in backend_parameters['numba_max']
 from . import have_fmm
 
 backend_parameters = {}
-backend_parameters['numba_max'] = 10000*10000
+backend_parameters['numba_max'] = 2000*2000
 
 def configure_backend_options(numba_max=None):
     """

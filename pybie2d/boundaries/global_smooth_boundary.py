@@ -583,7 +583,8 @@ def Compensated_Laplace_Apply(source, target, side, tau, do_DLP=False,
             Svb  *= SLP_weight
             after_adj *= SLP_weight
         vb += Svb            
-    u = compensated_cauchy_apply(source, target, side, vb, derivative=False)
+    u = compensated_cauchy_apply(source, target, side, vb, derivative=False,
+                                                                backend=backend)
     if do_SLP:
         u += after_adj
     return u

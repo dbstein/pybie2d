@@ -54,7 +54,9 @@ def Cauchy_Kernel_Self_Apply_FMM(source, dipstr, weights=None):
     weighted_weights = -0.5j*weights/np.pi
     ds = dipstr*weighted_weights
     src = np.row_stack([source.real, source.imag])
-    out = FMM(kind='cauchy', source=src, dipstr=ds,
+    # note the cauchy FMM hangs if not given a target...
+    # is this my wrapper or the code?
+    out = FMM(kind='cauchy', source=src, target=src, dipstr=ds,
                                     compute_source_potential=True)['source']
     return out['u']
 
@@ -108,7 +110,10 @@ def Cauchy_Kernel_Apply(source, target, dipstr, weights=None, backend='fly'):
 def _Cauchy_Kernel_Apply_numba_dipole(s, t, dipstr, pot):
     for i in numba.prange(t.shape[0]):
         for j in range(s.shape[0]):
-            pot[i] += dipstr[j]/(t[i]-s[j])
+            if t[i] != s[j]: # this is ugly!
+                pot[i] += dipstr[j]/(t[i]-s[j])
+            else:
+                pot[i] += np.Inf
 
 def Cauchy_Kernel_Apply_numba(source, target, dipstr, weights=None):
     weights = 1.0 if weights is None else weights

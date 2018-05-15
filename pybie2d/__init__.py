@@ -11,6 +11,7 @@ from . import boundaries
 from . import point_set
 from . import close
 from . import pairing
+from . import grid
 # from ._laplace_kernels import Laplace_DLP
 # from ._laplace_kernels import Laplace_SLP
 # from ._laplace_kernels import Laplace_Far_Apply

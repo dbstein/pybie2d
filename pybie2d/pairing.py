@@ -29,9 +29,10 @@ class Pairing(object):
         self.side = side
         self.error_tol = error_tol
         self.close_distance = source.tolerance_to_distance(error_tol)
-        self.close_points = find_near_points(self.source, self.target, \
-                                                    r=self.close_distance)
-        self.close_targ = PointSet(c=self.target.c[self.close_points])
+        self.close_points = self.target.find_near_points(self.source, 
+                                                        self.close_distance)
+        self.close_targ = PointSet(c=self.target.c[self.close_points],
+                                                            compute_tree=False)
         self.close_correctors = {}
     # end __init__ function definition
 
