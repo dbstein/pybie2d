@@ -39,11 +39,16 @@ class Pairing(object):
     def Setup_Close_Corrector(self, do_DLP=False, DLP_weight=None,
             do_SLP=False, SLP_weight=None, kernel='laplace', backend='fly'):
         code = (do_DLP, DLP_weight, do_SLP, SLP_weight, kernel, backend)
-        self.close_correctors[code] = \
-        Close_Corrector(self.source, self.close_targ, self.side, do_DLP,
+        if self.close_targ.N > 0:
+            self.close_correctors[code] = \
+                Close_Corrector(self.source, self.close_targ, self.side, do_DLP,
                                 DLP_weight, do_SLP, SLP_weight, kernel, backend)
+        else:
+            self.close_correctors[code] = Null_Corrector
         return code
 
     def Close_Correction(self, u, tau, code):
         u[self.close_points] += self.close_correctors[code](tau)
 
+def Null_Corrector(tau):
+    return 0.0

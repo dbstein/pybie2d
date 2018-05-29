@@ -4,7 +4,7 @@ import scipy.spatial
 import matplotlib as mpl
 import matplotlib.path
 
-from ..kernels.cauchy import Cauchy_Layer_Apply
+from ..kernels.high_level.cauchy import Cauchy_Layer_Apply
 from ..point_set import PointSet
 
 def find_interior_points(source, target, boundary_acceptable=False):

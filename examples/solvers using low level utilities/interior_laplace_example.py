@@ -15,17 +15,17 @@ And to give you an idea what is going on under the hood in the
 	higher level routines
 """
 
-N = 5000
+N = 1000
 
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle
 GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
 Grid = pybie2d.grid.Grid
 PointSet = pybie2d.point_set.PointSet
-Laplace_Layer_Form = pybie2d.kernels.laplace.Laplace_Layer_Form
-Laplace_Layer_Self_Form = pybie2d.kernels.laplace.Laplace_Layer_Self_Form
-Laplace_Layer_Apply = pybie2d.kernels.laplace.Laplace_Layer_Apply
-Cauchy_Layer_Apply = pybie2d.kernels.cauchy.Cauchy_Layer_Apply
+Laplace_Layer_Form = pybie2d.kernels.high_level.laplace.Laplace_Layer_Form
+Laplace_Layer_Singular_Form = pybie2d.kernels.high_level.laplace.Laplace_Layer_Singular_Form
+Laplace_Layer_Apply = pybie2d.kernels.high_level.laplace.Laplace_Layer_Apply
+Cauchy_Layer_Apply = pybie2d.kernels.high_level.cauchy.Cauchy_Layer_Apply
 Compensated_Laplace_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Full_Form
 Find_Near_Points = pybie2d.misc.near_points.find_near_points
 Pairing = pybie2d.pairing.Pairing
@@ -78,7 +78,7 @@ ext = full_grid.reshape(ext)
 ################################################################################
 # solve for the density
 
-DLP = Laplace_Layer_Self_Form(boundary, ifdipole=True, self_type='singular')
+DLP = Laplace_Layer_Singular_Form(boundary, ifdipole=True)
 A = -0.5*np.eye(boundary.N) + DLP
 tau = np.linalg.solve(A, bc)
 
@@ -150,7 +150,7 @@ ext = full_grid.reshape(ext)
 ################################################################################
 # solve for the density
 
-DLP = Laplace_Layer_Self_Form(boundary, ifdipole=True, self_type='singular')
+DLP = Laplace_Layer_Singular_Form(boundary, ifdipole=True)
 A = -0.5*np.eye(boundary.N) + DLP
 tau = np.linalg.solve(A, bc)
 
@@ -184,4 +184,19 @@ if N <= 1000:
 	pair.Close_Correction(uph, tau, code1)
 
 	err_plot(uph)
+
+################################################################################
+# generate a target that heads up to the boundary
+
+px, py = boundary.x, boundary.y
+nx, ny = boundary.normal_x, boundary.normal_y
+adj = 1.0/10**np.arange(2,16)
+tx = (px - nx*adj[:,None]).flatten()
+ty = (py - ny*adj[:,None]).flatten()
+
+approach_targ = PointSet(tx, ty)
+sol = Compensated_Laplace_Apply(boundary, approach_targ, 'i', tau, do_DLP=True).real
+true = solution_func(tx, ty)
+err = np.abs(true-sol)
+print('Error approaching boundary is: {:0.3e}'.format(err.max()))
 

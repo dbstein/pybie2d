@@ -16,9 +16,7 @@ class Close_Corrector(object):
         __call__():
             computes u = u + Ct - Nt, where Ct is the corrected quadrature
             applied to the density t, and Nt is the naive quadrature applied
-            to the density t.
-            this correction is only applied at points that are sufficiently
-            close to warrant doing the correction
+            to the density t
     """
     def __init__(self, source, target, side, do_DLP=False, DLP_weight=None,
             do_SLP=False, SLP_weight=None, kernel='laplace', backend='fly'):

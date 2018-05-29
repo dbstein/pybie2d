@@ -16,7 +16,7 @@ And to give you an idea what is going on under the hood in the
 	higher level routines
 """
 
-N  = 500   # discretization for test grid
+N  = 200   # discretization for test grid
 NB = 500  # discretization of boundary
 
 # extract some functions for easy calling
@@ -24,18 +24,13 @@ star = pybie2d.misc.curve_descriptions.star
 GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
 PointSet = pybie2d.point_set.PointSet
 Grid = pybie2d.grid.Grid
-Laplace_Layer_Form = pybie2d.kernels.laplace.Laplace_Layer_Form
-Laplace_Layer_Self_Form = pybie2d.kernels.laplace.Laplace_Layer_Self_Form
-Laplace_Layer_Apply = pybie2d.kernels.laplace.Laplace_Layer_Apply
-Cauchy_Layer_Apply = pybie2d.kernels.cauchy.Cauchy_Layer_Apply
+Laplace_Layer_Form = pybie2d.kernels.high_level.laplace.Laplace_Layer_Form
+Laplace_Layer_Singular_Form = pybie2d.kernels.high_level.laplace.Laplace_Layer_Singular_Form
+Laplace_Layer_Apply = pybie2d.kernels.high_level.laplace.Laplace_Layer_Apply
+Cauchy_Layer_Apply = pybie2d.kernels.high_level.cauchy.Cauchy_Layer_Apply
+Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Apply
 Compensated_Laplace_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Full_Form
 Pairing = pybie2d.pairing.Pairing
-Close_Corrector = pybie2d.close.Close_Corrector
-Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Apply
-Laplace_SLP_Self_Kress_Form = pybie2d.boundaries.global_smooth_boundary.Laplace_SLP_Self_Kress_Form
-Laplace_SLP_Self_Kress_Apply = pybie2d.boundaries.global_smooth_boundary.Laplace_SLP_Self_Kress_Apply
-CSLP_Form = pybie2d.boundaries.global_smooth_boundary.Complex_SLP_Kress_Split_Nystrom_Self_Form
-CSLP_Apply = pybie2d.boundaries.global_smooth_boundary.Complex_SLP_Kress_Split_Nystrom_Self_Apply
 
 ################################################################################
 # define problem
@@ -116,8 +111,7 @@ phys = np.logical_not(ext)
 ################################################################################
 # solve for the density
 
-ALP = Laplace_Layer_Self_Form(boundary, ifcharge=True, ifdipole=True,
-														self_type='singular')
+ALP = Laplace_Layer_Singular_Form(boundary, ifcharge=True, ifdipole=True)
 A = 0.5*np.eye(boundary.N) + ALP
 tau = np.linalg.solve(A, bc)
 
@@ -125,7 +119,6 @@ tau = np.linalg.solve(A, bc)
 # naive evaluation
 
 # generate a target for the physical grid
-# gridp = PointSet(x[phys], y[phys])
 gridp = Grid([-2,2], N, [-2,2], N, mask=phys, periodic=True)
 
 # evaluate at the target points
@@ -189,8 +182,7 @@ ext2 = full_grid.reshape(ext2)
 ################################################################################
 # solve for the density
 
-ALP = Laplace_Layer_Self_Form(boundary, ifcharge=True, ifdipole=True,
-														self_type='singular')
+ALP = Laplace_Layer_Singular_Form(boundary, ifcharge=True, ifdipole=True)
 A = 0.5*np.eye(boundary.N) + ALP
 tau = np.linalg.solve(A, bc)
 
@@ -198,7 +190,7 @@ tau = np.linalg.solve(A, bc)
 # naive evaluation
 
 # generate a target for the physical grid
-gridp = PointSet(x[phys], y[phys])
+gridp = Grid([-2,2], N, [-2,2], N, mask=phys, periodic=True)
 
 # evaluate at the target points
 up = Laplace_Layer_Apply(boundary, gridp, charge=tau, dipstr=tau)
@@ -234,3 +226,22 @@ code3 = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='fly')
 pair.Close_Correction(uph, tau, code3)
 
 err_plot(uph)
+
+################################################################################
+# generate a target that heads up to the boundary
+
+px, py = boundary.x, boundary.y
+nx, ny = boundary.normal_x, boundary.normal_y
+adj = 1.0/10**np.arange(2,16)
+tx = (px + nx*adj[:,None]).flatten()
+ty = (py + ny*adj[:,None]).flatten()
+
+approach_targ = PointSet(tx, ty)
+sol = Compensated_Laplace_Apply(boundary, approach_targ, 'e', tau, do_DLP=True, do_SLP=True).real
+true = solution_func(tx, ty)
+err = np.abs(true-sol)
+print('Error approaching boundary is: {:0.3e}'.format(err.max()))
+
+
+
+

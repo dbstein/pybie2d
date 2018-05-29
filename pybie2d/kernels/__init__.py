@@ -1,2 +1,2 @@
-from . import laplace
-from . import cauchy
+from . import low_level
+from . import high_level

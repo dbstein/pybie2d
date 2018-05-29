@@ -375,7 +375,7 @@ def Laplace_Kernel_Self_Apply_FMM(source, charge=None, dipstr=None,
     weighted_weights = -0.5*weights/np.pi
     ch = charge*weighted_weights if charge is not None else None
     ds = dipstr*weighted_weights if dipstr is not None else None
-    out = FMM(kind=kind, source=source, charge=ch, dipstr=ds,
+    out = FMM(kind=kind, source=source, target=source, charge=ch, dipstr=ds,
                 dipvec=dipvec, compute_source_potential=True)['source']
     return out['u']
 
@@ -553,21 +553,21 @@ def Laplace_Layer_Self_Apply(source, charge=None, dipstr=None,
         return Laplace_Kernel_Self_Apply(sourcex, charge, dipstr, dipvec,
                                                     weights, dtype, backend)
     else:
-        ALP = np.zeros([source.N,], dtype=dtype)
-        if ifdipole:
+        uALP = np.zeros([source.N,], dtype=dtype)
+        if dipstr is not None:
             # evaluate the DLP
             sourcex = source.stacked_boundary_T
             dipvec  = source.stacked_normal_T
             weights = source.weights
             uDLP = Laplace_Kernel_Self_Apply(sourcex, dipstr=dipstr,
                 dipvec=dipvec, weights=weights, dtype=dtype, backend=backend)
-            uDLP -= 0.25*source.curvature*weights/np.pi
-        if ifcharge:
+            uDLP -= 0.25*source.curvature*weights/np.pi*dipstr
+            ne.evaluate('uALP+uDLP', out=uALP)
+        if charge is not None:
             # form the SLP Matrix
             # because this is singular, this depends on the type of layer itself
             # and the SLP formation must be implemented in that class!
-            uSLP = source.Self_Laplace_Layer_Apply(ifcharge, chweight, ifdipole,
-                                                                dpweight, dtype)
+            uSLP = source.Laplace_SLP_Self_Apply(charge)
             ne.evaluate('uALP+uSLP', out=uALP)
         return uALP
 

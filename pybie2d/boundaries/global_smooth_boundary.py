@@ -10,9 +10,8 @@ import numba
 from ..misc.basic_functions import interpolate_to_p, differentiate, \
                 differentiation_matrix, apply_circulant_matrix
 from .boundary import Boundary
-from ..kernels.laplace import Laplace_Layer_Form, Laplace_Layer_Apply, \
-                            Laplace_Layer_Self_Form, Laplace_Layer_Self_Apply
-from ..kernels.cauchy import Cauchy_Layer_Form, Cauchy_Layer_Apply
+from ..kernels.high_level.laplace import Laplace_Layer_Form, Laplace_Layer_Apply
+from ..kernels.high_level.cauchy import Cauchy_Layer_Form, Cauchy_Layer_Apply
 from .. import have_fmm
 if have_fmm:
     from .. import FMM
@@ -186,6 +185,7 @@ class Global_Smooth_Boundary(Boundary):
             raise StandardError('The closed_boundary_element class currently \
                 only accepts N being even.')
 
+        self.shape = self.x.shape
         self.self_type = self_type
 
         self.__init2__(compute_quadrature, compute_tree)
@@ -310,14 +310,14 @@ class Global_Smooth_Boundary(Boundary):
     # end compute_quadrature function definition
 
     # self quadrature (apply) for Laplace SLP
-    def Laplace_SLP_Self_Apply(self, tau):
+    def Laplace_SLP_Self_Apply(self, tau, backend=None):
         """
         Apply Laplace SLP self-interaction kernel
 
         Inputs:
             tau,    required, dtype(ns): density (dtype can be float or complex)
         """
-        return Laplace_SLP_Self_Kress_Apply(self.x, self.y, self.speed, tau)
+        return Laplace_SLP_Self_Kress_Apply(self, tau, backend)
     # end Laplace_SLP_Self_Apply function definition
 
     # self quadrature (form) for Laplace SLP
@@ -378,7 +378,7 @@ def Laplace_SLP_Self_Kress_Form(source):
     # requires the function forming the matrices Kress_C to have been called
     weights = source.weights
     C = sp.linalg.circulant(source.Kress_V)
-    A = Laplace_Layer_Self_Form(source, ifcharge=True, self_type='naive')
+    A = Laplace_Layer_Form(source, ifcharge=True)
     np.fill_diagonal(A, -np.log(source.speed)/(2*np.pi)*weights)
     return ne.evaluate('A + C*weights')
 
@@ -391,7 +391,7 @@ def Laplace_SLP_Self_Kress_Apply(source, tau, backend='fly'):
     this should be recoded using numba and FFTs for applying the circulant mats
     """
     weighted_tau = tau*source.weights
-    u1 = Laplace_Layer_Self_Apply(source, charge=tau, backend=backend)
+    u1 = Laplace_Layer_Apply(source, charge=tau, backend=backend)
     u1 -= np.log(source.speed)/(2*np.pi)*weighted_tau
     u2 = apply_circulant_matrix(weighted_tau, c_hat=source.Kress_V_hat,
                                                                 real_it=True)
@@ -649,7 +649,6 @@ def compensated_cauchy_form(source, target, side, derivative=False):
     comp = Cauchy_Layer_Form(source, target)
     J0 = mysum(comp)
     if side == 'e':
-        # may have to check on this for SLPs!
         J0 += (2.0*np.pi)**2
     prefac = 1.0/J0
     prefacT = prefac[:,None]
@@ -658,7 +657,7 @@ def compensated_cauchy_form(source, target, side, derivative=False):
 
     if derivative:
         # get Schneider-Werner derivative matrix
-        DMAT = ne.evaluate('cw/(scT-sc')
+        DMAT = ne.evaluate('cw/(scT-sc)')
         np.fill_diagonal(DMAT, 0.0)
         np.fill_diagonal(DMAT, -mysum(DMAT))
         if side == 'e':
@@ -699,6 +698,10 @@ def compensated_laplace_dlp_preform(source, side):
     return M1, C1, C2
 
 def compensated_laplace_dlp_preapply(source, side, tau, backend='fly'):
+    # this separation of the barycentric form is okay
+    # because it is source-->source ignoring diagonal point
+    # no subtractions of points that are arbitrarily close
+    # unless you have a nearly self-intersecting curve!
     u1 = Cauchy_Layer_Apply(source, source, tau, backend=backend)
     u2 = Cauchy_Layer_Apply(source, source, source.ones_vec, backend=backend)
     scale = 1j/source.N
@@ -721,7 +724,7 @@ def compensated_laplace_slp_preform(source, target, side):
         LA = np.log(np.abs(source.inside_point_c-target.c))
         AFTER_MAT = -LA[:,None]*(source.weights/(2.0*np.pi))-MAT2.T
     else:
-        MAT = CSLP
+        MAT = source.CSLP
         AFTER_MAT = np.zeros([target.N, source.N])
     return MAT, AFTER_MAT
 # only one version (no FMM version...)
@@ -742,6 +745,6 @@ def compensated_laplace_slp_preapply(source, target, side, tau):
         after_adj = -totchgp*np.log(np.abs(source.inside_point_c-target.c)) - \
                                                                         vinf
     else:
-        after_adj = np.zeros(trg.N, dtype=complex)
+        after_adj = np.zeros(target.N, dtype=complex)
     return vb, after_adj
 
