@@ -1,5 +1,5 @@
 """
-This submodule provides higher-level wrappers for the Laplace Kernel Functions
+This submodule provides higher-level wrappers for the Stokes Kernel Functions
 """
 
 import numpy as np
@@ -12,28 +12,23 @@ from ... import have_fmm
 if have_fmm:
     from ... import FMM
 
-from ..low_level.laplace import Laplace_Kernel_Apply, Laplace_Kernel_Self_Apply
-from ..low_level.laplace import Laplace_Kernel_Form,  Laplace_Kernel_Self_Form
+from ..low_level.stokes import Stokes_Kernel_Apply, Stokes_Kernel_Self_Apply
+from ..low_level.stokes import Stokes_Kernel_Form,  Stokes_Kernel_Self_Form
 
 ################################################################################
 # Applies
 
-def Laplace_Layer_Apply(source, target=None, charge=None, dipstr=None,
-                                                gradient=False, backend='fly'):
+def Stokes_Layer_Apply(source, target=None, forces=None, dipstr=None,
+                                                                backend='fly'):
     """
-    Laplace Layer Apply (potential and gradient) in 2D
-    Computes the sum:
-        u_i = sum_j[G_ij charge_j + (dipvec_j dot grad G_ij) dipstr_j] weights_j
-    and appropriate derivatives, where:
+    Stokes Layer Apply
 
     Parameters:
         source,   required, Boundary,       source
         target,   optional, PointSet,       target
-        charge,   optional, dtype(ns),      charge
-        dipstr,   optional, dtype(ns),      dipole strength
+        forces,   optional, float(2, ns),   forces
+        dipstr,   optional, float(2, ns),   dipole strength
         weights,  optional, float(ns),      weights
-        gradient, optional, bool,           compute gradients or not
-            gradient only implemented for source-->target
         backend,  optional, str,            'fly', 'numba', 'FMM'
 
     If source is not target, then this function assumes that source and
@@ -43,72 +38,73 @@ def Laplace_Layer_Apply(source, target=None, charge=None, dipstr=None,
     """
     if target is None or source is target:
         backend = get_backend(source.N, source.N, backend)
-        return Laplace_Kernel_Self_Apply(
-                    source   = source.stacked_boundary_T,
-                    charge   = charge,
-                    dipstr   = dipstr,
-                    dipvec   = source.stacked_normal_T,
-                    weights  = source.weights,
-                    backend  = backend,
+        return Stokes_Kernel_Self_Apply(
+                    source  = source.stacked_boundary_T,
+                    forces  = forces,
+                    dipstr  = dipstr,
+                    dipvec  = source.stacked_normal_T,
+                    weights = source.weights,
+                    backend = backend,
                 )
     else:
         backend = get_backend(source.N, target.N, backend)
-        return Laplace_Kernel_Apply(
-                    source   = source.stacked_boundary_T,
-                    target   = target.stacked_boundary_T,
-                    charge   = charge,
-                    dipstr   = dipstr,
-                    dipvec   = source.stacked_normal_T,
-                    weights  = source.weights,
-                    gradient = gradient,
-                    backend  = backend,
+        return Stokes_Kernel_Apply(
+                    source  = source.stacked_boundary_T,
+                    target  = target.stacked_boundary_T,
+                    forces  = forces,
+                    dipstr  = dipstr,
+                    dipvec  = source.stacked_normal_T,
+                    weights = source.weights,
+                    backend = backend,
                 )
 
-def Laplace_Layer_Singular_Apply(source, charge=None, dipstr=None,
+def Stokes_Layer_Singular_Apply(source, forces=None,dipstr=None,
                                                                 backend='fly'):
     """
-    Laplace Layer Singular Apply (potential only)
+    Stokes Layer Singular Apply
 
     Parameters:
         source,   required, Boundary,       source
-        charge,   optional, dtype(ns),      charge
-        dipstr,   optional, dtype(ns),      dipole strength
+        forces,   optional, float(2, ns),   forces
+        dipstr,   optional, float(2, ns),   dipole strength
         weights,  optional, float(ns),      weights
         backend,  optional, str,            'fly', 'numba', 'FMM'
     """
-    uALP = np.zeros([source.N,], dtype=float)
+    uALP = np.zeros([2, source.N], dtype=float)
     if dipstr is not None:
         # evaluate the DLP
-        uDLP = Laplace_Layer_Apply(source, dipstr=dipstr, backend=backend)
-        uDLP -= 0.25*source.curvature*source.weights/np.pi*dipstr
+        uDLP = Stokes_Layer_Apply(source, dipstr=dipstr, backend=backend)
+        tx = source.tangent_x
+        ty = source.tangent_y
+        scale = -0.5*source.curvature*source.weights/np.pi
+        s01 = scale*tx*ty
+        uDLP[0] += (scale*tx*tx*dipstr[0] + s01*dipstr[1])
+        uDLP[1] += (s01*dipstr[0] + scale*ty*ty*dipstr[1])
         ne.evaluate('uALP+uDLP', out=uALP)
-    if charge is not None:
+    if forces is not None:
         # form the SLP Matrix
         # because this is singular, this depends on the type of layer itself
         # and the SLP formation must be implemented in that class!
         backend = get_backend(source.N, source.N, backend)
-        uSLP = source.Laplace_SLP_Self_Apply(charge, backend=backend)
+        uSLP = source.Stokes_SLP_Self_Apply(forces, backend=backend)
         ne.evaluate('uALP+uSLP', out=uALP)
     return uALP
 
 ################################################################################
 # Formations
 
-def Laplace_Layer_Form(source, target=None, ifcharge=False, chweight=None,
-                                ifdipole=False, dpweight=None, gradient=False):
+def Stokes_Layer_Form(source, target=None, ifforce=False, fweight=None,
+                                                ifdipole=False, dpweight=None):
     """
-    Laplace Layer Evaluation (potential and gradient in 2D)
-    Assumes that source is not target (see function Laplace_Layer_Self_Form)
+    Stokes Layer Evaluation (potential and gradient in 2D)
 
     Parameters:
         source,   required, Boundary, source
         target,   optional, Boundary, target
-        ifcharge, optional, bool,  include effect of charge (SLP)
-        chweight, optional, float, scalar weight for the SLP portion
+        ifforce,  optional, bool,  include effect of force (SLP)
+        fweight,  optional, float, scalar weight for the SLP portion
         ifdipole, optional, bool,  include effect of dipole (DLP)
         dpweight, optional, float, scalar weight for the DLP portion
-        gradient, optional, bool,  whether to compute the gradient matrices
-            gradient only implemented for source-->target
 
     If source is not target, then this function assumes that source and
         target have no coincident points
@@ -117,58 +113,65 @@ def Laplace_Layer_Form(source, target=None, ifcharge=False, chweight=None,
     """
     dipvec = None if ifdipole is None else source.stacked_normal_T
     if target is None or source is target:
-        return Laplace_Kernel_Self_Form(
+        return Stokes_Kernel_Self_Form(
                 source   = source.stacked_boundary_T,
-                ifcharge = ifcharge,
-                chweight = chweight,
+                ifforce  = ifforce,
+                fweight  = fweight,
                 ifdipole = ifdipole,
                 dpweight = dpweight,
                 dipvec   = dipvec,
                 weights  = source.weights,
             )
     else:
-        return Laplace_Kernel_Form(
+        return Stokes_Kernel_Form(
                 source   = source.stacked_boundary_T,
                 target   = target.stacked_boundary_T,
-                ifcharge = ifcharge,
-                chweight = chweight,
+                ifforce  = ifforce,
+                fweight  = fweight,
                 ifdipole = ifdipole,
                 dpweight = dpweight,
                 dipvec   = dipvec,
                 weights  = source.weights,
-                gradient = gradient,
             )
 
-def Laplace_Layer_Singular_Form(source, ifcharge=False, chweight=None,
+def Stokes_Layer_Singular_Form(source, ifforce=False, fweight=None,
                                                 ifdipole=False, dpweight=None):
     """
-    Laplace Layer Singular Form (potential only)
+    Stokes Layer Singular Form
 
     Parameters:
         source,   required, Boundary,   source
-        ifcharge, optional, bool,       include effect of charge (SLP)
-        chweight, optional, float,      scalar weight for the SLP portion
+        ifforce,  optional, bool,       include effect of force (SLP)
+        fweight,  optional, float,      scalar weight for the SLP portion
         ifdipole, optional, bool,       include effect of dipole (DLP)
         dpweight, optional, float,      scalar weight for the DLP portion
     """
-    ALP = np.zeros([source.N, source.N], dtype=float)
+    sn = source.N
+    ALP = np.zeros([2*sn, 2*sn], dtype=float)
     if ifdipole:
         # form the DLP Matrix
-        DLP = Laplace_Layer_Form(source, ifdipole=True)
+        DLP = Stokes_Layer_Form(source, ifdipole=True)
         # fix the diagonal
-        np.fill_diagonal(DLP, -0.25*source.curvature*source.weights/np.pi)
+        scale = -0.5*source.curvature*source.weights/np.pi
+        tx = source.tangent_x
+        ty = source.tangent_y
+        s01 = scale*tx*ty
+        np.fill_diagonal(DLP[:sn, :sn], scale*tx*tx)
+        np.fill_diagonal(DLP[sn:, :sn], s01)
+        np.fill_diagonal(DLP[:sn, sn:], s01)
+        np.fill_diagonal(DLP[sn:, sn:], scale*ty*ty)
         # weight, if necessary, and add to ALP
-        if dpweight == None:
+        if dpweight is None:
             ne.evaluate('ALP + DLP', out=ALP)
         else:
             ne.evaluate('ALP + DLP*dpweight', out=ALP)
-    if ifcharge:
+    if ifforce:
         # form the SLP Matrix
         # because this is singular, this depends on the type of layer itself
         # and the SLP formation must be implemented in that class!
-        SLP = source.Laplace_SLP_Self_Form()
+        SLP = source.Stokes_SLP_Self_Form()
         # weight, if necessary, and add to ALP
-        if chweight == None:
+        if fweight is None:
             ne.evaluate('ALP + SLP', out=ALP)
         else:
             ne.evaluate('ALP + SLP*chweight', out=ALP)

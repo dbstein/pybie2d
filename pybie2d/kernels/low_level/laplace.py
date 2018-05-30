@@ -32,7 +32,6 @@ def _LKANC(sx, sy, tx, ty, charge, pot):
     """
     for i in range(tx.shape[0]):
         pot[i] = 0.0
-    scale = -0.5/np.pi
     for i in numba.prange(tx.shape[0]):
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
@@ -591,7 +590,6 @@ def Laplace_Kernel_Form(source, target, ifcharge=False, chweight=None,
     """
     ns = source.shape[1]
     nt = target.shape[1]
-    scale = -1.0/(2*np.pi)
     SX = source[0]
     SY = source[1]
     TX = target[0][:,None]
@@ -599,8 +597,15 @@ def Laplace_Kernel_Form(source, target, ifcharge=False, chweight=None,
     if dipvec is not None:
         nx = dipvec[0]
         ny = dipvec[1]
+    scale = -1.0/(2*np.pi)
     if weights is not None:
         scale *= weights
+    chscale = scale
+    dpscale = scale.copy()
+    if chweight is not None:
+        chscale *= chweight
+    if dpweight is not None:
+        dpscale *= dpweight
     G = np.zeros([nt, ns], dtype=float)
     if gradient:
         Gx = np.zeros([nt, ns], dtype=float)
@@ -616,44 +621,24 @@ def Laplace_Kernel_Form(source, target, ifcharge=False, chweight=None,
         dx = ne.evaluate('TX - SX')
         dy = ne.evaluate('TY - SY')
         id2 = ne.evaluate('1.0/(dx**2 + dy**2)')
-        G1 = np.empty_like(dx)
         if ifcharge:
             # charges effect on potential
-            ne.evaluate('-0.5*log(id2)', out=G1)
-            if chweight is not None:
-                ne.evaluate('G1*chweight', out=G1)
-            ne.evaluate('G+G1', out=G)
+            ne.evaluate('G - 0.5*log(id2)*chscale', out=G)
         if ifdipole:
             # dipoles effect on potential
-            ne.evaluate('-(nx*dx + ny*dy)*id2', out=G1)
-            if dpweight is not None:
-                ne.evaluate('G1*dpweight', out=G1)
-            ne.evaluate('G+G1', out=G)
-        ne.evaluate('G*scale', out=G)
+            ne.evaluate('G - (nx*dx + ny*dy)*id2*dpscale', out=G)
         if gradient:
             Gx1 = G1
             Gy1 = np.empty_like(dx)
             if ifcharge:
                 # charges effect on gradient
-                ne.evaluate('dx*id2', out=Gx1)
-                ne.evaluate('dy*id2', out=Gy1)
-                if chweight is not None:
-                    ne.evaluate('Gx1*chweight', out=Gx1)
-                    ne.evaluate('Gy1*chweight', out=Gy1)
-                ne.evaluate('Gx+Gx1', out=Gx)
-                ne.evaluate('Gy+Gy1', out=Gy)
+                ne.evaluate('Gx + dx*id2*chscale', out=Gx)
+                ne.evaluate('Gy + dy*id2*chscale', out=Gy)
             if ifdipole:
                 # dipoles effect on gradient
                 id4 = ne.evaluate('id2*id2')
-                ne.evaluate('(nx*(dx*dx-dy*dy) + 2*ny*dx*dy)*id4', out=Gx1)
-                ne.evaluate('(2*nx*dx*dy + ny*(dy*dy-dx*dx))*id4', out=Gy1)
-                if dpweight is not None:
-                    ne.evaluate('Gx1*dpweight', out=Gx1)
-                    ne.evaluate('Gy1*dpweight', out=Gy1)
-                ne.evaluate('Gx+Gx1', out=Gx)
-                ne.evaluate('Gy+Gy1', out=Gy)
-            ne.evaluate('Gx*scale', out=Gx)
-            ne.evaluate('Gy*scale', out=Gy)
+                ne.evaluate('Gx + (nx*(dx*dx-dy*dy) + 2*ny*dx*dy)*id4*dpscale', out=Gx)
+                ne.evaluate('Gy + (2*nx*dx*dy + ny*(dy*dy-dx*dx))*id4*dpscale', out=Gy)
             return G, Gx, Gy
         else:
             return G
