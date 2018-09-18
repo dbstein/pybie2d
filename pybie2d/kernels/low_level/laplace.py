@@ -115,20 +115,13 @@ def _LKAND(sx, sy, tx, ty, dipstr, nx, ny, pot):
     for i in range(tx.shape[0]):
         pot[i] = 0.0
     for i in numba.prange(tx.shape[0]):
-        temp = np.zeros(sx.shape[0])
-        id2 = np.zeros(sx.shape[0])
-        n_dot_d = np.zeros(sx.shape[0])
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
             dy = ty[i] - sy[j]
-            temp[j] = dx**2 + dy**2
-            n_dot_d[j] = nx[j]*dx + ny[j]*dy
-        for j in range(sx.shape[0]):
-            id2[j] = 1.0/temp[j]
-            temp[j] = np.log(temp[j])
-        for j in range(sx.shape[0]):
-            pot[i] += 0.5*temp[j]*dipstr[j]
-            pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
+            d2 = dx**2 + dy**2
+            id2 = 1.0/d2
+            n_dot_d = nx[j]*dx + ny[j]*dy
+            pot[i] -= n_dot_d*id2*dipstr[j]
 
 @numba.njit(parallel=True)
 def _LKANDG(sx, sy, tx, ty, dipstr, nx, ny, pot, gradx, grady):
@@ -196,14 +189,19 @@ def _LKANB(sx, sy, tx, ty, charge, dipstr, nx, ny, pot):
     for i in range(tx.shape[0]):
         pot[i] = 0.0
     for i in numba.prange(tx.shape[0]):
+        temp = np.zeros(sx.shape[0])
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
             dy = ty[i] - sy[j]
-            d2 = dx**2 + dy**2
+            temp[j] = dx**2 + dy**2
+            d2 = temp[j]
             id2 = 1.0/d2
             n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] += 0.5*np.log(d2)*charge[j]
             pot[i] -= n_dot_d*id2*dipstr[j]
+        for j in range(sx.shape[0]):
+            temp[j] = np.log(temp[j])
+        for j in range(sx.shape[0]):
+            pot[i] += 0.5*charge[j]*temp[j]
 
 @numba.njit(parallel=True)
 def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady):

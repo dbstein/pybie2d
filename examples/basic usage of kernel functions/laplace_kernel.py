@@ -165,7 +165,6 @@ print('Time for FMM apply       (ms): {:0.2f}'.format(time_fmm.average*1000))
 print('Time for numexpr form    (ms): {:0.2f}'.format(time_numexpr_form*1000))
 print('Time for preformed apply (ms): {:0.2f}'.format(time_apply.average*1000))
 
-
 print('\n-- Laplace 2D Kernel Tests, Charge and Dipole, No Derivatives --\n')
 
 # using numba
