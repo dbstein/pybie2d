@@ -11,160 +11,7 @@ if have_fmm:
 # General Purpose Low Level Source --> Target Kernel Apply Functions
 
 @numba.njit(parallel=True)
-def _LKANC(sx, sy, tx, ty, charge, pot):
-    """
-    Numba-jitted Laplace Kernel
-    Case:
-        Incoming: charge
-        Outgoing: potential
-    Inputs:
-        sx,     intent(in),  float(ns), x-coordinates of source
-        sy,     intent(in),  float(ns), y-coordinates of source
-        tx,     intent(in),  float(nt), x-coordinates of target
-        ty,     intent(in),  float(nt), y-coordinates of target
-        charge, intent(in),  float(ns), charges at source locations
-        pot,    intent(out), float(nt), potential at target locations
-    ns = number of source points; nt = number of target points
-    all inputs are required
-
-    This function should generally not be called direclty
-    Instead call through the "Laplace_Kernel_Apply_numba" interface
-    """
-    for i in range(tx.shape[0]):
-        pot[i] = 0.0
-    for i in numba.prange(tx.shape[0]):
-        temp = np.zeros(sx.shape[0])
-        for j in range(sx.shape[0]):
-            dx = tx[i] - sx[j]
-            dy = ty[i] - sy[j]
-            temp[j] = dx**2 + dy**2
-        for j in range(sx.shape[0]):
-            temp[j] = np.log(temp[j])
-        for j in range(sx.shape[0]):
-            pot[i] += charge[j]*temp[j]
-    for i in range(tx.shape[0]):
-        pot[i] *= 0.5
-
-@numba.njit(parallel=True)
-def _LKANCG(sx, sy, tx, ty, charge, pot, gradx, grady):
-    """
-    Numba-jitted Laplace Kernel
-    Case:
-        Incoming: charge
-        Outgoing: potential, gradient
-    Inputs:
-        sx,     intent(in),  float(ns), x-coordinates of source
-        sy,     intent(in),  float(ns), y-coordinates of source
-        tx,     intent(in),  float(nt), x-coordinates of target
-        ty,     intent(in),  float(nt), y-coordinates of target
-        charge, intent(in),  float(ns), charges at source locations
-        pot,    intent(out), float(nt), potential at target locations
-        gradx,  intent(out), float(nt), x-derivative of potential
-        grady,  intent(out), float(nt), y-derivative of potential
-    ns = number of source points; nt = number of target points
-    all inputs are required
-
-    This function should generally not be called direclty
-    Instead call through the "Laplace_Kernel_Apply_numba" interface
-    """
-    for i in range(tx.shape[0]):
-        pot[i] = 0.0
-        gradx[i] = 0.0
-        grady[i] = 0.0
-    for i in numba.prange(tx.shape[0]):
-        temp = np.zeros(sx.shape[0])
-        id2 = np.zeros(sx.shape[0])
-        dx = np.zeros(sx.shape[0])
-        dy = np.zeros(sx.shape[0])
-        for j in range(sx.shape[0]):
-            dx[j] = tx[i] - sx[j]
-            dy[j] = ty[i] - sy[j]
-            temp[j] = dx[j]**2 + dy[j]**2
-        for j in range(sx.shape[0]):
-            id2[j] = 1.0/temp[j]
-            temp[j] = np.log(temp[j])
-        for j in range(sx.shape[0]):
-            pot[i] += temp[j]*charge[j]
-            gradx[i] += dx[j]*id2[j]*charge[j]
-            grady[i] += dy[j]*id2[j]*charge[j]
-    for i in range(tx.shape[0]):
-        pot[i] *= 0.5
-
-@numba.njit(parallel=True)
-def _LKAND(sx, sy, tx, ty, dipstr, nx, ny, pot):
-    """
-    Numba-jitted Laplace Kernel
-    Case:
-        Incoming: dipole
-        Outgoing: potential
-    Inputs:
-        sx,     intent(in),  float(ns), x-coordinates of source
-        sy,     intent(in),  float(ns), y-coordinates of source
-        tx,     intent(in),  float(nt), x-coordinates of target
-        ty,     intent(in),  float(nt), y-coordinates of target
-        dipstr, intent(in),  float(ns), dipole strength at source locations
-        nx,     intent(in),  float(ns), dipole orientation vector (x-coord)
-        ny,     intent(in),  float(ns), dipole orientation vector (y-coord)
-        pot,    intent(out), float(nt), potential at target locations
-    ns = number of source points; nt = number of target points
-    all inputs are required
-
-    This function should generally not be called direclty
-    Instead call through the "Laplace_Kernel_Apply_numba" interface
-    """
-    for i in range(tx.shape[0]):
-        pot[i] = 0.0
-    for i in numba.prange(tx.shape[0]):
-        for j in range(sx.shape[0]):
-            dx = tx[i] - sx[j]
-            dy = ty[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] -= n_dot_d*id2*dipstr[j]
-
-@numba.njit(parallel=True)
-def _LKANDG(sx, sy, tx, ty, dipstr, nx, ny, pot, gradx, grady):
-    """
-    Numba-jitted Laplace Kernel
-    Case:
-        Incoming: dipole
-        Outgoing: potential, gradient
-    Inputs:
-        sx,     intent(in),  float(ns), x-coordinates of source
-        sy,     intent(in),  float(ns), y-coordinates of source
-        tx,     intent(in),  float(nt), x-coordinates of target
-        ty,     intent(in),  float(nt), y-coordinates of target
-        dipstr, intent(in),  float(ns), dipole strength at source locations
-        nx,     intent(in),  float(ns), dipole orientation vector (x-coord)
-        ny,     intent(in),  float(ns), dipole orientation vector (y-coord)
-        pot,    intent(out), float(nt), potential at target locations
-        gradx,  intent(out), float(nt), x-derivative of potential
-        grady,  intent(out), float(nt), y-derivative of potential
-    ns = number of source points; nt = number of target points
-    all inputs are required
-
-    This function should generally not be called direclty
-    Instead call through the "Laplace_Kernel_Apply_numba" interface
-    """
-    for i in range(tx.shape[0]):
-        pot[i] = 0.0
-        gradx[i] = 0.0
-        grady[i] = 0.0
-    for i in numba.prange(tx.shape[0]):
-        for j in range(sx.shape[0]):
-            dx = tx[i] - sx[j]
-            dy = ty[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] -= n_dot_d*id2*dipstr[j]
-            id4 = id2*id2
-            gradx[i] += (nx[j]*(dx*dx - dy*dy) + 2*ny[j]*dx*dy)*id4*dipstr[j]
-            grady[i] += (nx[j]*2*dx*dy + ny[j]*(dy*dy - dx*dx))*id4*dipstr[j]
-
-@numba.njit(parallel=True)
-def _LKANB(sx, sy, tx, ty, charge, dipstr, nx, ny, pot):
+def _LKANB(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, ifcharge, ifdipole):
     """
     Numba-jitted Laplace Kernel
     Case:
@@ -186,40 +33,21 @@ def _LKANB(sx, sy, tx, ty, charge, dipstr, nx, ny, pot):
     This function should generally not be called direclty
     Instead call through the "Laplace_Kernel_Apply_numba" interface
     """
-    for i in range(tx.shape[0]):
-        pot[i] = 0.0
     for i in numba.prange(tx.shape[0]):
         temp = np.zeros(sx.shape[0])
-        id2 = np.zeros(sx.shape[0])
-        n_dot_d = np.zeros(sx.shape[0])
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
             dy = ty[i] - sy[j]
             temp[j] = dx**2 + dy**2
-            id2[j] = 1.0/temp[j]
-            n_dot_d[j] = nx[j]*dx + ny[j]*dy
-        for j in range(sx.shape[0]):
-            temp[j] = np.log(temp[j])
-        for j in range(sx.shape[0]):
-            pot[i] += 0.5*charge[j]*temp[j]
-            pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
-
-    # for i in range(tx.shape[0]):
-    #     pot[i] = 0.0
-    # for i in numba.prange(tx.shape[0]):
-    #     temp = np.zeros(sx.shape[0])
-    #     for j in range(sx.shape[0]):
-    #         dx = tx[i] - sx[j]
-    #         dy = ty[i] - sy[j]
-    #         temp[j] = dx**2 + dy**2
-    #         d2 = temp[j]
-    #         id2 = 1.0/d2
-    #         n_dot_d = nx[j]*dx + ny[j]*dy
-    #         pot[i] -= n_dot_d*id2*dipstr[j]
-    #     for j in range(sx.shape[0]):
-    #         temp[j] = np.log(temp[j])
-    #     for j in range(sx.shape[0]):
-    #         pot[i] += 0.5*charge[j]*temp[j]
+            if ifdipole:
+                id2 = 1.0/temp[j]
+                n_dot_d = nx[j]*dx + ny[j]*dy
+                pot[i] -= n_dot_d*id2*dipstr[j]
+        if ifcharge:
+            for j in range(sx.shape[0]):
+                temp[j] = np.log(temp[j])
+            for j in range(sx.shape[0]):
+                pot[i] += 0.5*charge[j]*temp[j]
 
 @numba.njit(parallel=True)
 def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady):
@@ -246,24 +74,29 @@ def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady):
     This function should generally not be called direclty
     Instead call through the "Laplace_Kernel_Apply_numba" interface
     """
-    for i in range(tx.shape[0]):
-        pot[i] = 0.0
-        gradx[i] = 0.0
-        grady[i] = 0.0
     for i in numba.prange(tx.shape[0]):
+        temp = np.zeros(sx.shape[0])
+        id2 = np.zeros(sx.shape[0])
+        id4 = np.zeros(sx.shape[0])
+        dx = np.zeros(sx.shape[0])
+        dy = np.zeros(sx.shape[0])
+        n_dot_d = np.zeros(sx.shape[0])
         for j in range(sx.shape[0]):
-            dx = tx[i] - sx[j]
-            dy = ty[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] += 0.5*np.log(d2)*charge[j]
-            pot[i] -= n_dot_d*id2*dipstr[j]
-            id4 = id2*id2
-            gradx[i] += dx*id2*charge[j]
-            grady[i] += dy*id2*charge[j]
-            gradx[i] += (nx[j]*(dx*dx - dy*dy) + 2*ny[j]*dx*dy)*id4*dipstr[j]
-            grady[i] += (nx[j]*2*dx*dy + ny[j]*(dy*dy - dx*dx))*id4*dipstr[j]
+            dx[j] = tx[i] - sx[j]
+            dy[j] = ty[i] - sy[j]
+            temp[j] = dx[j]**2 + dy[j]**2
+            id2[j] = 1.0/temp[j]
+            id4[j] = id2[j]*id2[j]
+            n_dot_d[j] = nx[j]*dx[j] + ny[j]*dy[j]
+        for j in range(sx.shape[0]):
+            temp[j] = np.log(temp[j])
+        for j in range(sx.shape[0]):
+            pot[i] += 0.5*charge[j]*temp[j]
+            pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
+            gradx[i] += dx[j]*id2[j]*charge[j]
+            grady[i] += dy[j]*id2[j]*charge[j]
+            gradx[i] += (nx[j]*(dx[j]*dx[j] - dy[j]*dy[j]) + 2*ny[j]*dx[j]*dy[j])*id4[j]*dipstr[j]
+            grady[i] += (nx[j]*2*dx[j]*dy[j] + ny[j]*(dy[j]*dy[j] - dx[j]*dx[j]))*id4[j]*dipstr[j]
 
 def Laplace_Kernel_Apply_numba(source, target, charge=None, dipstr=None,
                                 dipvec=None, weights=None, gradient=False):
@@ -293,33 +126,21 @@ def Laplace_Kernel_Apply_numba(source, target, charge=None, dipstr=None,
     sy = source[1]
     tx = target[0]
     ty = target[1]
-    code = 0
-    pot = np.empty(target.shape[1], dtype=float)
-    if charge is not None:
-        code += 1
-        ch = charge*weighted_weights
-    if dipstr is not None:
-        code += 2
-        ds = dipstr*weighted_weights
-        nx = dipvec[0]
-        ny = dipvec[1]
+    ifcharge = charge is not None
+    ifdipole = dipstr is not None
+    pot = np.zeros(target.shape[1], dtype=float)
+    zero_vec = np.zeros(source.shape[1], dtype=float)
+    ch = zero_vec if charge is None else charge*weighted_weights
+    ds = zero_vec if dipstr is None else dipstr*weighted_weights
+    nx = zero_vec if dipvec is None else dipvec[0]
+    ny = zero_vec if dipvec is None else dipvec[1]
     if gradient:
-        gradx = np.empty(target.shape[1], dtype=float)
-        grady = np.empty(target.shape[1], dtype=float)
-        if code == 1:
-            _LKANCG(sx, sy, tx, ty, ch, pot, gradx, grady)
-        if code == 2:
-            _LKANDG(sx, sy, tx, ty, ds, nx, ny, pot, gradx, grady)
-        if code == 3:
-            _LKANBG(sx, sy, tx, ty, ch, ds, nx, ny, pot, gradx, grady)
+        gradx = np.zeros(target.shape[1], dtype=float)
+        grady = np.zeros(target.shape[1], dtype=float)
+        _LKANBG(sx, sy, tx, ty, ch, ds, nx, ny, pot, gradx, grady)
         return pot, gradx, grady
     else:
-        if code == 1:
-            _LKANC(sx, sy, tx, ty, ch, pot)
-        if code == 2:
-            _LKAND(sx, sy, tx, ty, ds, nx, ny, pot)
-        if code == 3:
-            _LKANB(sx, sy, tx, ty, ch, ds, nx, ny, pot)
+        _LKANB(sx, sy, tx, ty, ch, ds, nx, ny, pot, ifcharge, ifdipole)
         return pot
 
 def Laplace_Kernel_Apply_FMM(source, target, charge=None, dipstr=None,
