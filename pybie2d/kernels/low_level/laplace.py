@@ -80,25 +80,31 @@ def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady):
     """
     for i in numba.prange(tx.shape[0]):
         temp = np.zeros(sx.shape[0])
-        id2 = np.zeros(sx.shape[0])
-        id4 = np.zeros(sx.shape[0])
         dx = np.zeros(sx.shape[0])
         dy = np.zeros(sx.shape[0])
-        n_dot_d = np.zeros(sx.shape[0])
+        id2 = np.zeros(sx.shape[0])
+        if ifdipole:
+            id4 = np.zeros(sx.shape[0])
+            n_dot_d = np.zeros(sx.shape[0])
         for j in range(sx.shape[0]):
             dx[j] = tx[i] - sx[j]
             dy[j] = ty[i] - sy[j]
             temp[j] = dx[j]**2 + dy[j]**2
+        for j in range(sx.shape[0]):
             id2[j] = 1.0/temp[j]
-            id4[j] = id2[j]*id2[j]
-            n_dot_d[j] = nx[j]*dx[j] + ny[j]*dy[j]
-        for j in range(sx.shape[0]):
-            temp[j] = np.log(temp[j])
-        for j in range(sx.shape[0]):
+        if ifcharge:
+            for j in range(sx.shape[0]):
+                temp[j] = np.log(temp[j])
+        if ifdipole:
+            for j in range(sx.shape[0]):
+                id4[j] = id2[j]*id2[j]
+                n_dot_d[j] = nx[j]*dx[j] + ny[j]*dy[j]
+        if ifcharge:
             pot[i] += 0.5*charge[j]*temp[j]
-            pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
             gradx[i] += dx[j]*id2[j]*charge[j]
             grady[i] += dy[j]*id2[j]*charge[j]
+        if ifdipole:
+            pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
             gradx[i] += (nx[j]*(dx[j]*dx[j] - dy[j]*dy[j]) + 2*ny[j]*dx[j]*dy[j])*id4[j]*dipstr[j]
             grady[i] += (nx[j]*2*dx[j]*dy[j] + ny[j]*(dy[j]*dy[j] - dx[j]*dx[j]))*id4[j]*dipstr[j]
 
