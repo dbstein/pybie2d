@@ -15,26 +15,43 @@ def get_random(sh, dtype):
 
 dtype=float
 
-ns = 10000
+ns = 1000
 nt = 10000
 source = get_random([2, ns], float)
 target = get_random([2, nt], float)
 dipvec = get_random([2, ns], float)
 charge = get_random([ns,], dtype)
 
+print('\n-- Laplace 2D Kernel Tests, Charge Only, No Derivatives --\n')
+
 # using numba
-st = time.time()
-pot1 = Laplace_Kernel_Apply(source, target, charge=charge, backend='numba')
-time_first_numba = time.time() - st
-st = time.time()
-pot1 = Laplace_Kernel_Apply(source, target, charge=charge, backend='numba')
-time_second_numba = time.time() - st
+print('Testing Numba (Apply)')
+pot_numba = Laplace_Kernel_Apply(source, target, charge=charge, backend='numba')
+time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, backend='numba')
 
 # using FMM
-st = time.time()
-pot2 = Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM')
-time_fmm = time.time() - st
+print('Testing FMM (Apply)')
+pot_fmm = Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM')
+time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM')
 
+# using numexpr
+print('Testing Numexpr (Form)')
+st = time.time()
+MAT = Laplace_Kernel_Form(source, target, ifcharge=True, dipvec=dipvec)
+time_numexpr_form = time.time() - st
+pot_numexpr = MAT.dot(charge)
+time_apply = %timeit -o MAT.dot(charge)
+
+# print comparison
+print('')
+print('Maximum difference, potential,    numba vs. FMM:  {:0.1e}'.format(np.abs(pot_numba-pot_fmm).max()))
+print('Maximum difference, potential,    numba vs. Form: {:0.1e}'.format(np.abs(pot_numba-pot_numexpr).max()))
+print('Maximum difference, potential,    FMM   vs. Form: {:0.1e}'.format(np.abs(pot_fmm-pot_numexpr).max()))
+print('')
+print('Time for numba apply     (ms): {:0.2f}'.format(time_numba.average*1000))
+print('Time for FMM apply       (ms): {:0.2f}'.format(time_fmm.average*1000))
+print('Time for numexpr form    (ms): {:0.2f}'.format(time_numexpr_form*1000))
+print('Time for preformed apply (ms): {:0.2f}'.format(time_apply.average*1000))
 
 
 
