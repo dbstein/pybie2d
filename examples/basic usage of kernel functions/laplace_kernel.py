@@ -5,6 +5,7 @@ from pybie2d.kernels.high_level.laplace import Laplace_Kernel_Apply, Laplace_Ker
 
 """
 Demonstrate usage of the basic Laplace Kernels
+Also timing/consistency checks
 """
 
 def get_random(sh, dtype):
@@ -15,12 +16,13 @@ def get_random(sh, dtype):
 
 dtype=float
 
-ns = 1000
-nt = 10000
+ns = 5000
+nt = 5000
 source = get_random([2, ns], float)
 target = get_random([2, nt], float)
 dipvec = get_random([2, ns], float)
 charge = get_random([ns,], dtype)
+dipstr = get_random([ns,], dtype)
 
 print('\n-- Laplace 2D Kernel Tests, Charge Only, No Derivatives --\n')
 
@@ -37,7 +39,7 @@ time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, backe
 # using numexpr
 print('Testing Numexpr (Form)')
 st = time.time()
-MAT = Laplace_Kernel_Form(source, target, ifcharge=True, dipvec=dipvec)
+MAT = Laplace_Kernel_Form(source, target, ifcharge=True)
 time_numexpr_form = time.time() - st
 pot_numexpr = MAT.dot(charge)
 time_apply = %timeit -o MAT.dot(charge)
@@ -62,16 +64,56 @@ time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, bac
 
 # using FMM
 print('Testing FMM (Apply)')
-pot_fmm = Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM')
-time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM')
+pot_fmm, gx_fmm, gy_fmm = Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM', gradient=True)
+time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM', gradient=True)
 
 # using numexpr
 print('Testing Numexpr (Form)')
 st = time.time()
-MAT = Laplace_Kernel_Form(source, target, ifcharge=True, dipvec=dipvec)
+MAT, MATx, MATy = Laplace_Kernel_Form(source, target, ifcharge=True, gradient=True)
 time_numexpr_form = time.time() - st
 pot_numexpr = MAT.dot(charge)
-time_apply = %timeit -o MAT.dot(charge)
+gx_numexpr = MATx.dot(charge)
+gy_numexpr = MATy.dot(charge)
+time_apply = %timeit -o MAT.dot(charge); MATx.dot(charge); MATy.dot(charge)
+
+# print comparison
+print('')
+print('Maximum difference, potential,    numba vs. FMM:  {:0.1e}'.format(np.abs(pot_numba-pot_fmm).max()))
+print('Maximum difference, potential,    numba vs. Form: {:0.1e}'.format(np.abs(pot_numba-pot_numexpr).max()))
+print('Maximum difference, potential,    FMM   vs. Form: {:0.1e}'.format(np.abs(pot_fmm-pot_numexpr).max()))
+print('Maximum difference, gradient_x,   numba vs. FMM:  {:0.1e}'.format(np.abs(gx_numba-gx_fmm).max()))
+print('Maximum difference, gradient_x,   numba vs. Form: {:0.1e}'.format(np.abs(gx_numba-gx_numexpr).max()))
+print('Maximum difference, gradient_x,   FMM   vs. Form: {:0.1e}'.format(np.abs(gx_fmm-gx_numexpr).max()))
+print('Maximum difference, gradient_y,   numba vs. FMM:  {:0.1e}'.format(np.abs(gy_numba-gy_fmm).max()))
+print('Maximum difference, gradient_y,   numba vs. Form: {:0.1e}'.format(np.abs(gy_numba-gy_numexpr).max()))
+print('Maximum difference, gradient_y,   FMM   vs. Form: {:0.1e}'.format(np.abs(gy_fmm-gy_numexpr).max()))
+print('')
+print('Time for numba apply     (ms): {:0.2f}'.format(time_numba.average*1000))
+print('Time for FMM apply       (ms): {:0.2f}'.format(time_fmm.average*1000))
+print('Time for numexpr form    (ms): {:0.2f}'.format(time_numexpr_form*1000))
+print('Time for preformed apply (ms): {:0.2f}'.format(time_apply.average*1000))
+
+
+print('\n-- Laplace 2D Kernel Tests, Dipole Only, No Derivatives --\n')
+
+# using numba
+print('Testing Numba (Apply)')
+pot_numba = Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='numba')
+time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='numba')
+
+# using FMM
+print('Testing FMM (Apply)')
+pot_fmm = Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='FMM')
+time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='FMM')
+
+# using numexpr
+print('Testing Numexpr (Form)')
+st = time.time()
+MAT = Laplace_Kernel_Form(source, target, ifdipole=True, dipvec=dipvec)
+time_numexpr_form = time.time() - st
+pot_numexpr = MAT.dot(dipstr)
+time_apply = %timeit -o MAT.dot(dipstr)
 
 # print comparison
 print('')
@@ -84,45 +126,75 @@ print('Time for FMM apply       (ms): {:0.2f}'.format(time_fmm.average*1000))
 print('Time for numexpr form    (ms): {:0.2f}'.format(time_numexpr_form*1000))
 print('Time for preformed apply (ms): {:0.2f}'.format(time_apply.average*1000))
 
+print('\n-- Laplace 2D Kernel Tests, Dipole Only, With Derivatives --\n')
 
 # using numba
-st = time.time()
-pot1, gradx1, grady1 = Laplace_Kernel_Apply(source, target, charge=charge,
-            dipstr=0.5*charge, dipvec=dipvec, backend='numba', gradient=True)
-time_first_numba = time.time() - st
-st = time.time()
-pot1, gradx1, grady1 = Laplace_Kernel_Apply(source, target, charge=charge,
-            dipstr=0.5*charge, dipvec=dipvec, backend='numba', gradient=True)
-time_second_numba = time.time() - st
+print('Testing Numba (Apply)')
+pot_numba, gx_numba, gy_numba = Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
+time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
 
 # using FMM
-st = time.time()
-pot2, gradx2, grady2 = Laplace_Kernel_Apply(source, target, charge=charge,
-                dipstr=0.5*charge, dipvec=dipvec, backend='FMM', gradient=True)
-time_fmm = time.time() - st
+print('Testing FMM (Apply)')
+pot_fmm, gx_fmm, gy_fmm = Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
+time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
 
+# using numexpr
+print('Testing Numexpr (Form)')
 st = time.time()
-MAT, MATx, MATy = Laplace_Kernel_Form(source, target, ifcharge=True,
-                    ifdipole=True, dpweight=0.5, dipvec=dipvec, gradient=True)
-time_form = time.time() - st
-st = time.time()
-pot3 = MAT.dot(charge)
-gradx3 = MATx.dot(charge)
-grady3 = MATy.dot(charge)
-time_apply = time.time() - st
+MAT, MATx, MATy = Laplace_Kernel_Form(source, target, ifdipole=True, dipvec=dipvec, gradient=True)
+time_numexpr_form = time.time() - st
+pot_numexpr = MAT.dot(dipstr)
+gx_numexpr = MATx.dot(dipstr)
+gy_numexpr = MATy.dot(dipstr)
+time_apply = %timeit -o MAT.dot(dipstr); MATx.dot(dipstr); MATy.dot(dipstr)
 
 # print comparison
 print('')
-print('Maximum difference, potential,    numba vs. FMM:  {:0.1e}'.format(np.abs(pot1-pot2).max()))
-print('Maximum difference, potential,    numba vs. Form: {:0.1e}'.format(np.abs(pot1-pot3).max()))
-print('Maximum difference, x-derivative, numba vs. FMM:  {:0.1e}'.format(np.abs(gradx1-gradx2).max()))
-print('Maximum difference, x-derivative, numba vs. Form: {:0.1e}'.format(np.abs(gradx1-gradx3).max()))
-print('Maximum difference, y-derivative, numba vs. FMM:  {:0.1e}'.format(np.abs(grady1-grady2).max()))
-print('Maximum difference, y-derivative, numba vs. Form: {:0.1e}'.format(np.abs(grady1-grady3).max()))
+print('Maximum difference, potential,    numba vs. FMM:  {:0.1e}'.format(np.abs(pot_numba-pot_fmm).max()))
+print('Maximum difference, potential,    numba vs. Form: {:0.1e}'.format(np.abs(pot_numba-pot_numexpr).max()))
+print('Maximum difference, potential,    FMM   vs. Form: {:0.1e}'.format(np.abs(pot_fmm-pot_numexpr).max()))
+print('Maximum difference, gradient_x,   numba vs. FMM:  {:0.1e}'.format(np.abs(gx_numba-gx_fmm).max()))
+print('Maximum difference, gradient_x,   numba vs. Form: {:0.1e}'.format(np.abs(gx_numba-gx_numexpr).max()))
+print('Maximum difference, gradient_x,   FMM   vs. Form: {:0.1e}'.format(np.abs(gx_fmm-gx_numexpr).max()))
+print('Maximum difference, gradient_y,   numba vs. FMM:  {:0.1e}'.format(np.abs(gy_numba-gy_fmm).max()))
+print('Maximum difference, gradient_y,   numba vs. Form: {:0.1e}'.format(np.abs(gy_numba-gy_numexpr).max()))
+print('Maximum difference, gradient_y,   FMM   vs. Form: {:0.1e}'.format(np.abs(gy_fmm-gy_numexpr).max()))
 print('')
-print('Time for first  numba apply (ms): {:0.1f}'.format(time_first_numba*1000))
-print('Time for second numba apply (ms): {:0.1f}'.format(time_second_numba*1000))
-print('Time for FMM based    apply (ms): {:0.1f}'.format(time_fmm*1000))
-print('Time for matrix formation   (ms): {:0.1f}'.format(time_form*1000))
-print('Time for preformed apply    (ms): {:0.1f}'.format(time_apply*1000))
+print('Time for numba apply     (ms): {:0.2f}'.format(time_numba.average*1000))
+print('Time for FMM apply       (ms): {:0.2f}'.format(time_fmm.average*1000))
+print('Time for numexpr form    (ms): {:0.2f}'.format(time_numexpr_form*1000))
+print('Time for preformed apply (ms): {:0.2f}'.format(time_apply.average*1000))
+
+
+print('\n-- Laplace 2D Kernel Tests, Charge and Dipole, No Derivatives --\n')
+
+# using numba
+print('Testing Numba (Apply)')
+pot_numba = Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba')
+time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba')
+
+# using FMM
+print('Testing FMM (Apply)')
+pot_fmm = Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM')
+time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM')
+
+# using numexpr
+print('Testing Numexpr (Form)')
+st = time.time()
+MATc = Laplace_Kernel_Form(source, target, ifcharge=True)
+MATd = Laplace_Kernel_Form(source, target, ifdipole=True, dipvec=dipvec)
+time_numexpr_form = time.time() - st
+pot_numexpr = MATc.dot(charge) + MATd.dot(dipstr)
+time_apply = %timeit -o MATc.dot(charge) + MATd.dot(dipstr)
+
+# print comparison
+print('')
+print('Maximum difference, potential,    numba vs. FMM:  {:0.1e}'.format(np.abs(pot_numba-pot_fmm).max()))
+print('Maximum difference, potential,    numba vs. Form: {:0.1e}'.format(np.abs(pot_numba-pot_numexpr).max()))
+print('Maximum difference, potential,    FMM   vs. Form: {:0.1e}'.format(np.abs(pot_fmm-pot_numexpr).max()))
+print('')
+print('Time for numba apply     (ms): {:0.2f}'.format(time_numba.average*1000))
+print('Time for FMM apply       (ms): {:0.2f}'.format(time_fmm.average*1000))
+print('Time for numexpr form    (ms): {:0.2f}'.format(time_numexpr_form*1000))
+print('Time for preformed apply (ms): {:0.2f}'.format(time_apply.average*1000))
 
