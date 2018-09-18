@@ -12,8 +12,8 @@ from ... import have_fmm
 if have_fmm:
     from ... import FMM
 
-from ..low_level.laplace import Laplace_Kernel_Apply, Laplace_Kernel_Self_Apply
-from ..low_level.laplace import Laplace_Kernel_Form,  Laplace_Kernel_Self_Form
+from ..low_level.laplace import Laplace_Kernel_Apply
+from ..low_level.laplace import Laplace_Kernel_Form
 
 ################################################################################
 # Applies
@@ -41,28 +41,19 @@ def Laplace_Layer_Apply(source, target=None, charge=None, dipstr=None,
         ignoring the i=j term in the sum
     """
     dipvec = None if dipstr is None else source.get_stacked_normal(T=True)
-    if target is None or source is target:
-        backend = get_backend(source.N, source.N, backend)
-        return Laplace_Kernel_Self_Apply(
-                    source   = source.get_stacked_boundary(T=True),
-                    charge   = charge,
-                    dipstr   = dipstr,
-                    dipvec   = dipvec,
-                    weights  = source.weights,
-                    backend  = backend,
-                )
-    else:
-        backend = get_backend(source.N, target.N, backend)
-        return Laplace_Kernel_Apply(
-                    source   = source.get_stacked_boundary(T=True),
-                    target   = target.get_stacked_boundary(T=True),
-                    charge   = charge,
-                    dipstr   = dipstr,
-                    dipvec   = dipvec,
-                    weights  = source.weights,
-                    gradient = gradient,
-                    backend  = backend,
-                )
+    if target is None:
+        source = target
+    backend = get_backend(source.N, source.N, backend)
+    return Laplace_Kernel_Apply(
+                source   = source.get_stacked_boundary(T=True),
+                target   = target.get_stacked_boundary(T=True),
+                charge   = charge,
+                dipstr   = dipstr,
+                dipvec   = dipvec,
+                weights  = source.weights,
+                gradient = gradient,
+                backend  = backend,
+            )
 
 def Laplace_Layer_Singular_Apply(source, charge=None, dipstr=None,
                                                                 backend='fly'):
@@ -115,28 +106,19 @@ def Laplace_Layer_Form(source, target=None, ifcharge=False, chweight=None,
         ignoring the i=j term in the sum
     """
     dipvec = None if ifdipole is None else source.get_stacked_normal(T=True)
-    if target is None or source is target:
-        return Laplace_Kernel_Self_Form(
-                source   = source.get_stacked_boundary(T=True),
-                ifcharge = ifcharge,
-                chweight = chweight,
-                ifdipole = ifdipole,
-                dpweight = dpweight,
-                dipvec   = dipvec,
-                weights  = source.weights,
-            )
-    else:
-        return Laplace_Kernel_Form(
-                source   = source.get_stacked_boundary(T=True),
-                target   = target.get_stacked_boundary(T=True),
-                ifcharge = ifcharge,
-                chweight = chweight,
-                ifdipole = ifdipole,
-                dpweight = dpweight,
-                dipvec   = dipvec,
-                weights  = source.weights,
-                gradient = gradient,
-            )
+    if target is None:
+        target = source
+    return Laplace_Kernel_Form(
+            source   = source.get_stacked_boundary(T=True),
+            target   = target.get_stacked_boundary(T=True),
+            ifcharge = ifcharge,
+            chweight = chweight,
+            ifdipole = ifdipole,
+            dpweight = dpweight,
+            dipvec   = dipvec,
+            weights  = source.weights,
+            gradient = gradient,
+        )
 
 def Laplace_Layer_Singular_Form(source, ifcharge=False, chweight=None,
                                                 ifdipole=False, dpweight=None):
