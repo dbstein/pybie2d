@@ -45,8 +45,9 @@ def _LKANB(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, ifcharge, ifdipole):
             if ifdipole:
                 n_dot_d[j] = nx[j]*dx + ny[j]*dy
         if ifdipole:
-            id2[j] = 1.0/temp[j]
-            pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
+            for j in range(sx.shape[0]):
+                id2[j] = 1.0/temp[j]
+                pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
         if ifcharge:
             for j in range(sx.shape[0]):
                 temp[j] = np.log(temp[j])
@@ -54,7 +55,7 @@ def _LKANB(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, ifcharge, ifdipole):
                 pot[i] += 0.5*charge[j]*temp[j]
 
 @numba.njit(parallel=True)
-def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady):
+def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady, ifcharge, ifdipole):
     """
     Numba-jitted Laplace Kernel
     Case:
@@ -100,13 +101,15 @@ def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady):
                 id4[j] = id2[j]*id2[j]
                 n_dot_d[j] = nx[j]*dx[j] + ny[j]*dy[j]
         if ifcharge:
-            pot[i] += 0.5*charge[j]*temp[j]
-            gradx[i] += dx[j]*id2[j]*charge[j]
-            grady[i] += dy[j]*id2[j]*charge[j]
+            for j in range(sx.shape[0]):
+                pot[i] += 0.5*charge[j]*temp[j]
+                gradx[i] += dx[j]*id2[j]*charge[j]
+                grady[i] += dy[j]*id2[j]*charge[j]
         if ifdipole:
-            pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
-            gradx[i] += (nx[j]*(dx[j]*dx[j] - dy[j]*dy[j]) + 2*ny[j]*dx[j]*dy[j])*id4[j]*dipstr[j]
-            grady[i] += (nx[j]*2*dx[j]*dy[j] + ny[j]*(dy[j]*dy[j] - dx[j]*dx[j]))*id4[j]*dipstr[j]
+            for j in range(sx.shape[0]):
+                pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
+                gradx[i] += (nx[j]*(dx[j]*dx[j] - dy[j]*dy[j]) + 2*ny[j]*dx[j]*dy[j])*id4[j]*dipstr[j]
+                grady[i] += (nx[j]*2*dx[j]*dy[j] + ny[j]*(dy[j]*dy[j] - dx[j]*dx[j]))*id4[j]*dipstr[j]
 
 def Laplace_Kernel_Apply_numba(source, target, charge=None, dipstr=None,
                                 dipvec=None, weights=None, gradient=False):
@@ -147,7 +150,7 @@ def Laplace_Kernel_Apply_numba(source, target, charge=None, dipstr=None,
     if gradient:
         gradx = np.zeros(target.shape[1], dtype=float)
         grady = np.zeros(target.shape[1], dtype=float)
-        _LKANBG(sx, sy, tx, ty, ch, ds, nx, ny, pot, gradx, grady)
+        _LKANBG(sx, sy, tx, ty, ch, ds, nx, ny, pot, gradx, grady, ifcharge, ifdipole)
         return pot, gradx, grady
     else:
         _LKANB(sx, sy, tx, ty, ch, ds, nx, ny, pot, ifcharge, ifdipole)

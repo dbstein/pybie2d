@@ -16,8 +16,8 @@ def get_random(sh, dtype):
 
 dtype=float
 
-ns = 5000
-nt = 5000
+ns = 1000
+nt = 1000
 source = get_random([2, ns], float)
 target = get_random([2, nt], float)
 dipvec = get_random([2, ns], float)
