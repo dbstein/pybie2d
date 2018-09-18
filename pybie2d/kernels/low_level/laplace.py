@@ -57,7 +57,7 @@ def _LKANB(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, ifcharge, ifdipole, dose
                     pot[i] += 0.5*charge[j]*temp[j]
 
 @numba.njit(parallel=True)
-def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady, ifcharge, ifdipole):
+def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady, ifcharge, ifdipole, doself):
     """
     Numba-jitted Laplace Kernel
     Case:
@@ -104,14 +104,16 @@ def _LKANBG(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, gradx, grady, ifcharge,
                 n_dot_d[j] = nx[j]*dx[j] + ny[j]*dy[j]
         if ifcharge:
             for j in range(sx.shape[0]):
-                pot[i] += 0.5*charge[j]*temp[j]
-                gradx[i] += dx[j]*id2[j]*charge[j]
-                grady[i] += dy[j]*id2[j]*charge[j]
+                if not (doself and i == j):
+                    pot[i] += 0.5*charge[j]*temp[j]
+                    gradx[i] += dx[j]*id2[j]*charge[j]
+                    grady[i] += dy[j]*id2[j]*charge[j]
         if ifdipole:
             for j in range(sx.shape[0]):
-                pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
-                gradx[i] += (nx[j]*(dx[j]*dx[j] - dy[j]*dy[j]) + 2*ny[j]*dx[j]*dy[j])*id4[j]*dipstr[j]
-                grady[i] += (nx[j]*2*dx[j]*dy[j] + ny[j]*(dy[j]*dy[j] - dx[j]*dx[j]))*id4[j]*dipstr[j]
+                if not (doself and i == j):
+                    pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
+                    gradx[i] += (nx[j]*(dx[j]*dx[j] - dy[j]*dy[j]) + 2*ny[j]*dx[j]*dy[j])*id4[j]*dipstr[j]
+                    grady[i] += (nx[j]*2*dx[j]*dy[j] + ny[j]*(dy[j]*dy[j] - dx[j]*dx[j]))*id4[j]*dipstr[j]
 
 def Laplace_Kernel_Apply_numba(source, target, charge=None, dipstr=None,
                                 dipvec=None, weights=None, gradient=False):
@@ -227,114 +229,8 @@ def Laplace_Kernel_Apply(source, target, charge=None, dipstr=None, dipvec=None,
 # These are naive quadratures with no self interaction!
 # only potentials are currently implemented for self-interaction
 
-@numba.njit(parallel=True)
-def _LKSANC(sx, sy, charge, pot):
-    """
-    Numba-jitted Laplace Kernel (self, naive quadrature)
-    Case:
-        Incoming: charge
-        Outgoing: potential
-    Inputs:
-        sx,     intent(in),  float(ns), x-coordinates of source
-        sy,     intent(in),  float(ns), y-coordinates of source
-        charge, intent(in),  float(ns), charges at source locations
-        pot,    intent(out), float(ns), potential at target locations
-    ns = number of source points
-    all inputs are required
-
-    This function should generally not be called direclty
-    Instead call through the "Laplace_Kernel_Self_Apply_numba" interface
-    """
-    scale = -0.5/np.pi
-    for i in numba.prange(sx.shape[0]):
-        for j in range(i):
-            dx = sx[i] - sx[j]
-            dy = sy[i] - sy[j]
-            d2 = dx**2 + dy**2
-            pot[i] += 0.5*np.log(d2)*charge[j]
-        for j in range(i+1,sx.shape[0]):
-            dx = sx[i] - sx[j]
-            dy = sy[i] - sy[j]
-            d2 = dx**2 + dy**2
-            pot[i] += 0.5*np.log(d2)*charge[j]
-
-@numba.njit(parallel=True)
-def _LKSAND(sx, sy, dipstr, nx, ny, pot):
-    """
-    Numba-jitted Laplace Kernel (self, naive quadrature)
-    Case:
-        Incoming: dipole
-        Outgoing: potential
-    Inputs:
-        sx,     intent(in),  float(ns), x-coordinates of source
-        sy,     intent(in),  float(ns), y-coordinates of source
-        dipstr, intent(in),  float(ns), dipole strength at source locations
-        nx,     intent(in),  float(ns), dipole orientation vector (x-coord)
-        ny,     intent(in),  float(ns), dipole orientation vector (y-coord)
-        pot,    intent(out), float(ns), potential at target locations
-    ns = number of source points
-    all inputs are required
-
-    This function should generally not be called direclty
-    Instead call through the "Laplace_Kernel_Self_Apply_numba" interface
-    """
-    for i in numba.prange(sx.shape[0]):
-        for j in range(i):
-            dx = sx[i] - sx[j]
-            dy = sy[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] -= n_dot_d*id2*dipstr[j]
-        for j in range(i+1,sx.shape[0]):
-            dx = sx[i] - sx[j]
-            dy = sy[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] -= n_dot_d*id2*dipstr[j]
-
-@numba.njit(parallel=True)
-def _LKSANB(sx, sy, charge, dipstr, nx, ny, pot):
-    """
-    Numba-jitted Laplace Kernel (self, naive quadrature)
-    Case:
-        Incoming: dipole
-        Outgoing: potential
-    Inputs:
-        sx,     intent(in),  float(ns), x-coordinates of source
-        sy,     intent(in),  float(ns), y-coordinates of source
-        charge, intent(in),  float(ns), charges at source locations
-        dipstr, intent(in),  float(ns), dipole strength at source locations
-        nx,     intent(in),  float(ns), dipole orientation vector (x-coord)
-        ny,     intent(in),  float(ns), dipole orientation vector (y-coord)
-        pot,    intent(out), float(ns), potential at target locations
-    ns = number of source points
-    all inputs are required
-
-    This function should generally not be called direclty
-    Instead call through the "Laplace_Kernel_Self_Apply_numba" interface
-    """
-    for i in numba.prange(sx.shape[0]):
-        for j in range(i):
-            dx = sx[i] - sx[j]
-            dy = sy[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] += 0.5*np.log(d2)*charge[j]
-            pot[i] -= n_dot_d*id2*dipstr[j]
-        for j in range(i+1,sx.shape[0]):
-            dx = sx[i] - sx[j]
-            dy = sy[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            n_dot_d = nx[j]*dx + ny[j]*dy
-            pot[i] += 0.5*np.log(d2)*charge[j]
-            pot[i] -= n_dot_d*id2*dipstr[j]
-
 def Laplace_Kernel_Self_Apply_numba(source, charge=None, dipstr=None,
-                                                dipvec=None, weights=None):
+                                    dipvec=None, weights=None, gradient=False):
     """
     Interface to numba-jitted Laplace Kernels (self, naive quadrature)
     Inputs:
@@ -359,26 +255,25 @@ def Laplace_Kernel_Self_Apply_numba(source, charge=None, dipstr=None,
     weighted_weights = -0.5*weights/np.pi
     sx = source[0]
     sy = source[1]
-    code = 0
+    ifcharge = charge is not None
+    ifdipole = dipstr is not None
     pot = np.zeros(source.shape[1], dtype=float)
-    if charge is not None:
-        code += 1
-        ch = charge*weighted_weights
-    if dipstr is not None:
-        code += 2
-        ds = dipstr*weighted_weights
-        nx = dipvec[0]
-        ny = dipvec[1]
-    if code == 1:
-        _LKSANC(sx, sy, ch, pot)
-    if code == 2:
-        _LKSAND(sx, sy, ds, nx, ny, pot)
-    if code == 3:
-        _LKSANB(sx, sy, ch, ds, nx, ny, pot)
-    return pot
+    zero_vec = np.zeros(source.shape[1], dtype=float)
+    ch = zero_vec if charge is None else charge*weighted_weights
+    ds = zero_vec if dipstr is None else dipstr*weighted_weights
+    nx = zero_vec if dipvec is None else dipvec[0]
+    ny = zero_vec if dipvec is None else dipvec[1]
+    if gradient:
+        gradx = np.zeros(source.shape[1], dtype=float)
+        grady = np.zeros(source.shape[1], dtype=float)
+        _LKANBG(sx, sy, sx, sy, ch, ds, nx, ny, pot, gradx, grady, ifcharge, ifdipole, True)
+        return pot, gradx, grady
+    else:
+        _LKANB(sx, sy, sx, sy, ch, ds, nx, ny, pot, ifcharge, ifdipole, True)
+        return pot
 
 def Laplace_Kernel_Self_Apply_FMM(source, charge=None, dipstr=None,
-                                                dipvec=None, weights=None):
+                                    dipvec=None, weights=None, gradient=False):
     """
     Interface to FMM Laplace Kernels (self, naive quadrature)
     Inputs:
@@ -403,15 +298,19 @@ def Laplace_Kernel_Self_Apply_FMM(source, charge=None, dipstr=None,
     ch = charge*weighted_weights if charge is not None else None
     ds = dipstr*weighted_weights if dipstr is not None else None
     out = FMM(kind='laplace', source=source, target=source, charge=ch,
-        dipstr=ds, dipvec=dipvec, compute_source_potential=True)['source']
-    return out['u']
+        dipstr=ds, dipvec=dipvec, compute_source_potential=True,
+        compute_source_gradient=gradient)['source']
+    if gradient:
+        return out['u'], out['u_x'], out['u_y']
+    else:
+        return out['u']
 
 Laplace_Kernel_Self_Applys = {}
 Laplace_Kernel_Self_Applys['numba'] = Laplace_Kernel_Self_Apply_numba
 Laplace_Kernel_Self_Applys['FMM']   = Laplace_Kernel_Self_Apply_FMM
 
 def Laplace_Kernel_Self_Apply(source, charge=None, dipstr=None,
-                                dipvec=None, weights=None, backend='numba'):
+            dipvec=None, weights=None, backend='numba', gradient=False):
     """
     Interface to Laplace Kernels (self, naive quadrature)
     Inputs:
@@ -433,7 +332,7 @@ def Laplace_Kernel_Self_Apply(source, charge=None, dipstr=None,
     ns = number of source points
     """
     return Laplace_Kernel_Self_Applys[backend](source, charge, dipstr, dipvec,
-                                                                        weights)
+                                                            weights, gradient)
 
 ################################################################################
 # General Purpose Low Level Source --> Target Kernel Formation
@@ -518,7 +417,7 @@ def Laplace_Kernel_Form(source, target, ifcharge=False, chweight=None,
 # only potentials are currently implemented for self-interaction
 
 def Laplace_Kernel_Self_Form(source, ifcharge=False, chweight=None,
-                    ifdipole=False, dpweight=None, dipvec=None, weights=None):
+    ifdipole=False, dpweight=None, dipvec=None, weights=None, gradient=False):
     """
     Laplace Kernel Formation
     Computes the matrix:
@@ -535,7 +434,12 @@ def Laplace_Kernel_Self_Form(source, ifcharge=False, chweight=None,
         dipvec,   optional, float(2, ns),  dipole orientations
         weights,  optional, float(ns),     quadrature weights
     """
-    G = Laplace_Kernel_Form(source, source, ifcharge, chweight, ifdipole,
-                                            dpweight, dipvec, weights, False)
-    np.fill_diagonal(G, 0.0)
-    return G
+    Gs = Laplace_Kernel_Form(source, source, ifcharge, chweight, ifdipole,
+                                            dpweight, dipvec, weights, gradient)
+    if gradient:
+        for i in range(3):
+            np.fill_diagonal(Gs[i], 0.0)
+        return Gs
+    else:
+        np.fill_diagonal(Gs, 0.0)
+        return Gs

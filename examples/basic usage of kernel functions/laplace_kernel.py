@@ -17,8 +17,8 @@ def get_random(sh, dtype):
 
 dtype=float
 
-ns = 10000
-nt = 10000
+ns = 2000
+nt = 2000
 
 source = get_random([2, ns], float)
 target = get_random([2, nt], float)
@@ -260,13 +260,13 @@ time_numba =  %timeit -o Laplace_Kernel_Self_Apply(source, charge=charge, backen
 
 # using FMM
 print('Testing FMM (Apply)')
-pot_fmm = Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM')
-time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM')
+pot_fmm = Laplace_Kernel_Self_Apply(source, charge=charge, backend='FMM')
+time_fmm =  %timeit -o Laplace_Kernel_Self_Apply(source, charge=charge, backend='FMM')
 
 # using numexpr
 print('Testing Numexpr (Form)')
 st = time.time()
-MAT = Laplace_Kernel_Form(source, target, ifcharge=True)
+MAT = Laplace_Kernel_Self_Form(source, ifcharge=True)
 time_numexpr_form = time.time() - st
 pot_numexpr = MAT.dot(charge)
 time_apply = %timeit -o MAT.dot(charge)
@@ -286,18 +286,18 @@ print('\n-- Laplace 2D Kernel Tests, Dipole Only, No Derivatives --\n')
 
 # using numba
 print('Testing Numba (Apply)')
-pot_numba = Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='numba')
-time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='numba')
+pot_numba = Laplace_Kernel_Self_Apply(source, dipstr=dipstr, dipvec=dipvec, backend='numba')
+time_numba =  %timeit -o Laplace_Kernel_Self_Apply(source, dipstr=dipstr, dipvec=dipvec, backend='numba')
 
 # using FMM
 print('Testing FMM (Apply)')
-pot_fmm = Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='FMM')
-time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='FMM')
+pot_fmm = Laplace_Kernel_Self_Apply(source, dipstr=dipstr, dipvec=dipvec, backend='FMM')
+time_fmm =  %timeit -o Laplace_Kernel_Self_Apply(source, dipstr=dipstr, dipvec=dipvec, backend='FMM')
 
 # using numexpr
 print('Testing Numexpr (Form)')
 st = time.time()
-MAT = Laplace_Kernel_Form(source, target, ifdipole=True, dipvec=dipvec)
+MAT = Laplace_Kernel_Self_Form(source, ifdipole=True, dipvec=dipvec)
 time_numexpr_form = time.time() - st
 pot_numexpr = MAT.dot(dipstr)
 time_apply = %timeit -o MAT.dot(dipstr)
@@ -317,19 +317,19 @@ print('\n-- Laplace 2D Kernel Tests, Charge and Dipole, No Derivatives --\n')
 
 # using numba
 print('Testing Numba (Apply)')
-pot_numba = Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba')
-time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba')
+pot_numba = Laplace_Kernel_Self_Apply(source, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba')
+time_numba =  %timeit -o Laplace_Kernel_Self_Apply(source, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba')
 
 # using FMM
 print('Testing FMM (Apply)')
-pot_fmm = Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM')
-time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM')
+pot_fmm = Laplace_Kernel_Self_Apply(source, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM')
+time_fmm =  %timeit -o Laplace_Kernel_Self_Apply(source, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM')
 
 # using numexpr
 print('Testing Numexpr (Form)')
 st = time.time()
-MATc = Laplace_Kernel_Form(source, target, ifcharge=True)
-MATd = Laplace_Kernel_Form(source, target, ifdipole=True, dipvec=dipvec)
+MATc = Laplace_Kernel_Self_Form(source, ifcharge=True)
+MATd = Laplace_Kernel_Self_Form(source, ifdipole=True, dipvec=dipvec)
 time_numexpr_form = time.time() - st
 pot_numexpr = MATc.dot(charge) + MATd.dot(dipstr)
 time_apply = %timeit -o MATc.dot(charge) + MATd.dot(dipstr)
@@ -347,24 +347,22 @@ print('Time for preformed apply (ms): {:0.2f}'.format(time_apply.average*1000))
 
 
 
-
-
 print('\n-- Laplace 2D Kernel Tests, Charge Only, With Derivatives --\n')
 
 # using numba
 print('Testing Numba (Apply)')
-pot_numba, gx_numba, gy_numba = Laplace_Kernel_Apply(source, target, charge=charge, backend='numba', gradient=True)
-time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, backend='numba', gradient=True)
+pot_numba, gx_numba, gy_numba = Laplace_Kernel_Self_Apply(source, charge=charge, backend='numba', gradient=True)
+time_numba =  %timeit -o Laplace_Kernel_Self_Apply(source, charge=charge, backend='numba', gradient=True)
 
 # using FMM
 print('Testing FMM (Apply)')
-pot_fmm, gx_fmm, gy_fmm = Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM', gradient=True)
-time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM', gradient=True)
+pot_fmm, gx_fmm, gy_fmm = Laplace_Kernel_Self_Apply(source, charge=charge, backend='FMM', gradient=True)
+time_fmm =  %timeit -o Laplace_Kernel_Self_Apply(source, charge=charge, backend='FMM', gradient=True)
 
 # using numexpr
 print('Testing Numexpr (Form)')
 st = time.time()
-MAT, MATx, MATy = Laplace_Kernel_Form(source, target, ifcharge=True, gradient=True)
+MAT, MATx, MATy = Laplace_Kernel_Self_Form(source, ifcharge=True, gradient=True)
 time_numexpr_form = time.time() - st
 pot_numexpr = MAT.dot(charge)
 gx_numexpr = MATx.dot(charge)
@@ -392,18 +390,18 @@ print('\n-- Laplace 2D Kernel Tests, Dipole Only, With Derivatives --\n')
 
 # using numba
 print('Testing Numba (Apply)')
-pot_numba, gx_numba, gy_numba = Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
-time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
+pot_numba, gx_numba, gy_numba = Laplace_Kernel_Self_Apply(source, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
+time_numba =  %timeit -o Laplace_Kernel_Self_Apply(source, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
 
 # using FMM
 print('Testing FMM (Apply)')
-pot_fmm, gx_fmm, gy_fmm = Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
-time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
+pot_fmm, gx_fmm, gy_fmm = Laplace_Kernel_Self_Apply(source, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
+time_fmm =  %timeit -o Laplace_Kernel_Self_Apply(source, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
 
 # using numexpr
 print('Testing Numexpr (Form)')
 st = time.time()
-MAT, MATx, MATy = Laplace_Kernel_Form(source, target, ifdipole=True, dipvec=dipvec, gradient=True)
+MAT, MATx, MATy = Laplace_Kernel_Self_Form(source, ifdipole=True, dipvec=dipvec, gradient=True)
 time_numexpr_form = time.time() - st
 pot_numexpr = MAT.dot(dipstr)
 gx_numexpr = MATx.dot(dipstr)
@@ -431,19 +429,19 @@ print('\n-- Laplace 2D Kernel Tests, Charge and Dipole, With Derivatives --\n')
 
 # using numba
 print('Testing Numba (Apply)')
-pot_numba, gx_numba, gy_numba = Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
-time_numba =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
+pot_numba, gx_numba, gy_numba = Laplace_Kernel_Self_Apply(source, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
+time_numba =  %timeit -o Laplace_Kernel_Self_Apply(source, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='numba', gradient=True)
 
 # using FMM
 print('Testing FMM (Apply)')
-pot_fmm, gx_fmm, gy_fmm = Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
-time_fmm =  %timeit -o Laplace_Kernel_Apply(source, target, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
+pot_fmm, gx_fmm, gy_fmm = Laplace_Kernel_Self_Apply(source, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
+time_fmm =  %timeit -o Laplace_Kernel_Self_Apply(source, charge=charge, dipstr=dipstr, dipvec=dipvec, backend='FMM', gradient=True)
 
 # using numexpr
 print('Testing Numexpr (Form)')
 st = time.time()
-cMAT, cMATx, cMATy = Laplace_Kernel_Form(source, target, ifcharge=True, gradient=True)
-dMAT, dMATx, dMATy = Laplace_Kernel_Form(source, target, ifdipole=True, dipvec=dipvec, gradient=True)
+cMAT, cMATx, cMATy = Laplace_Kernel_Self_Form(source, ifcharge=True, gradient=True)
+dMAT, dMATx, dMATy = Laplace_Kernel_Self_Form(source, ifdipole=True, dipvec=dipvec, gradient=True)
 time_numexpr_form = time.time() - st
 pot_numexpr = cMAT.dot(charge) + dMAT.dot(dipstr)
 gx_numexpr = cMATx.dot(charge) + dMATx.dot(dipstr)
