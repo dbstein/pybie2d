@@ -35,14 +35,18 @@ def _LKANB(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, ifcharge, ifdipole):
     """
     for i in numba.prange(tx.shape[0]):
         temp = np.zeros(sx.shape[0])
+        if ifdipole:
+            id2 = np.zeros(sx.shape[0])
+            n_dot_d = np.zeros(sx.shape[0])
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
             dy = ty[i] - sy[j]
             temp[j] = dx**2 + dy**2
             if ifdipole:
-                id2 = 1.0/temp[j]
-                n_dot_d = nx[j]*dx + ny[j]*dy
-                pot[i] -= n_dot_d*id2*dipstr[j]
+                n_dot_d[j] = nx[j]*dx + ny[j]*dy
+        if ifdipole:
+            id2[j] = 1.0/temp[j]
+            pot[i] -= n_dot_d[j]*id2[j]*dipstr[j]
         if ifcharge:
             for j in range(sx.shape[0]):
                 temp[j] = np.log(temp[j])
