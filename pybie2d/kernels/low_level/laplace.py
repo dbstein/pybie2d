@@ -79,7 +79,7 @@ def _LKANCG(sx, sy, tx, ty, charge, pot, gradx, grady):
         for j in range(sx.shape[0]):
             dx[j] = tx[i] - sx[j]
             dy[j] = ty[i] - sy[j]
-            temp[j] = dx**2 + dy**2
+            temp[j] = dx[j]**2 + dy[j]**2
         for j in range(sx.shape[0]):
             id2[j] = 1.0/temp[j]
             temp[j] = np.log(temp[j])
