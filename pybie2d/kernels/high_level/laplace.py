@@ -31,7 +31,6 @@ def Laplace_Layer_Apply(source, target=None, charge=None, dipstr=None,
         target,   optional, PointSet,       target
         charge,   optional, dtype(ns),      charge
         dipstr,   optional, dtype(ns),      dipole strength
-        weights,  optional, float(ns),      weights
         gradient, optional, bool,           compute gradients or not
             gradient only implemented for source-->target
         backend,  optional, str,            'fly', 'numba', 'FMM'
@@ -41,24 +40,25 @@ def Laplace_Layer_Apply(source, target=None, charge=None, dipstr=None,
     If source is target, this function computes a naive quadrature,
         ignoring the i=j term in the sum
     """
+    dipvec = None if dipstr is None else source.get_stacked_normal(T=True)
     if target is None or source is target:
         backend = get_backend(source.N, source.N, backend)
         return Laplace_Kernel_Self_Apply(
-                    source   = source.stacked_boundary_T,
+                    source   = source.get_stacked_boundary(T=True),
                     charge   = charge,
                     dipstr   = dipstr,
-                    dipvec   = source.stacked_normal_T,
+                    dipvec   = dipvec,
                     weights  = source.weights,
                     backend  = backend,
                 )
     else:
         backend = get_backend(source.N, target.N, backend)
         return Laplace_Kernel_Apply(
-                    source   = source.stacked_boundary_T,
-                    target   = target.stacked_boundary_T,
+                    source   = source.get_stacked_boundary(T=True),
+                    target   = target.get_stacked_boundary(T=True),
                     charge   = charge,
                     dipstr   = dipstr,
-                    dipvec   = source.stacked_normal_T,
+                    dipvec   = dipvec,
                     weights  = source.weights,
                     gradient = gradient,
                     backend  = backend,
@@ -73,7 +73,6 @@ def Laplace_Layer_Singular_Apply(source, charge=None, dipstr=None,
         source,   required, Boundary,       source
         charge,   optional, dtype(ns),      charge
         dipstr,   optional, dtype(ns),      dipole strength
-        weights,  optional, float(ns),      weights
         backend,  optional, str,            'fly', 'numba', 'FMM'
     """
     uALP = np.zeros([source.N,], dtype=float)
@@ -115,10 +114,10 @@ def Laplace_Layer_Form(source, target=None, ifcharge=False, chweight=None,
     If source is target, this function computes a naive quadrature,
         ignoring the i=j term in the sum
     """
-    dipvec = None if ifdipole is None else source.stacked_normal_T
+    dipvec = None if ifdipole is None else source.get_stacked_normal(T=True)
     if target is None or source is target:
         return Laplace_Kernel_Self_Form(
-                source   = source.stacked_boundary_T,
+                source   = source.get_stacked_boundary(T=True),
                 ifcharge = ifcharge,
                 chweight = chweight,
                 ifdipole = ifdipole,
@@ -128,8 +127,8 @@ def Laplace_Layer_Form(source, target=None, ifcharge=False, chweight=None,
             )
     else:
         return Laplace_Kernel_Form(
-                source   = source.stacked_boundary_T,
-                target   = target.stacked_boundary_T,
+                source   = source.get_stacked_boundary(T=True),
+                target   = target.get_stacked_boundary(T=True),
                 ifcharge = ifcharge,
                 chweight = chweight,
                 ifdipole = ifdipole,

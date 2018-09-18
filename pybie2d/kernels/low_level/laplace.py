@@ -598,14 +598,9 @@ def Laplace_Kernel_Form(source, target, ifcharge=False, chweight=None,
         nx = dipvec[0]
         ny = dipvec[1]
     scale = -1.0/(2*np.pi)
-    if weights is not None:
-        scale *= weights
-    chscale = scale
-    dpscale = scale.copy()
-    if chweight is not None:
-        chscale *= chweight
-    if dpweight is not None:
-        dpscale *= dpweight
+    scale = scale*np.ones(ns) if weights is None else scale*weights
+    chscale = scale if chweight is None else scale*chweight
+    dpscale = scale if dpweight is None else scale*dpweight
     G = np.zeros([nt, ns], dtype=float)
     if gradient:
         Gx = np.zeros([nt, ns], dtype=float)
@@ -628,7 +623,7 @@ def Laplace_Kernel_Form(source, target, ifcharge=False, chweight=None,
             # dipoles effect on potential
             ne.evaluate('G - (nx*dx + ny*dy)*id2*dpscale', out=G)
         if gradient:
-            Gx1 = G1
+            Gx1 = np.empty_like(dx)
             Gy1 = np.empty_like(dx)
             if ifcharge:
                 # charges effect on gradient

@@ -1,7 +1,7 @@
 import numpy as np
 import time
 import pybie2d
-from pybie2d.kernels.laplace import Laplace_Kernel_Apply, Laplace_Kernel_Form
+from pybie2d.kernels.high_level.laplace import Laplace_Kernel_Apply, Laplace_Kernel_Form
 
 """
 Demonstrate usage of the basic Laplace Kernels
@@ -15,8 +15,8 @@ def get_random(sh, dtype):
 
 dtype=float
 
-ns = 2000
-nt = 5000
+ns = 10000
+nt = 10000
 source = get_random([2, ns], float)
 target = get_random([2, nt], float)
 dipvec = get_random([2, ns], float)
@@ -24,28 +24,42 @@ charge = get_random([ns,], dtype)
 
 # using numba
 st = time.time()
-pot1, gradx1, grady1 = Laplace_Kernel_Apply(source, target, charge=charge,
-                            dipstr=0.5*charge, dipvec=dipvec, backend='numba',
-                            dtype=dtype, gradient=True)
+pot1 = Laplace_Kernel_Apply(source, target, charge=charge,
+            dipstr=0.5*charge, dipvec=dipvec, backend='numba', gradient=True)
 time_first_numba = time.time() - st
 st = time.time()
 pot1, gradx1, grady1 = Laplace_Kernel_Apply(source, target, charge=charge,
-                            dipstr=0.5*charge, dipvec=dipvec, backend='numba',
-                            dtype=dtype, gradient=True)
+            dipstr=0.5*charge, dipvec=dipvec, backend='numba', gradient=True)
+time_second_numba = time.time() - st
+
+# using FMM
+st = time.time()
+pot2 = Laplace_Kernel_Apply(source, target, charge=charge,
+                dipstr=0.5*charge, dipvec=dipvec, backend='FMM', gradient=True)
+time_fmm = time.time() - st
+
+
+
+
+# using numba
+st = time.time()
+pot1, gradx1, grady1 = Laplace_Kernel_Apply(source, target, charge=charge,
+            dipstr=0.5*charge, dipvec=dipvec, backend='numba', gradient=True)
+time_first_numba = time.time() - st
+st = time.time()
+pot1, gradx1, grady1 = Laplace_Kernel_Apply(source, target, charge=charge,
+            dipstr=0.5*charge, dipvec=dipvec, backend='numba', gradient=True)
 time_second_numba = time.time() - st
 
 # using FMM
 st = time.time()
 pot2, gradx2, grady2 = Laplace_Kernel_Apply(source, target, charge=charge,
-                            dipstr=0.5*charge, dipvec=dipvec, backend='FMM',
-                            dtype=dtype, gradient=True)
+                dipstr=0.5*charge, dipvec=dipvec, backend='FMM', gradient=True)
 time_fmm = time.time() - st
 
-# form the matrices (have to make two calls since charge, dipstr different...)
 st = time.time()
 MAT, MATx, MATy = Laplace_Kernel_Form(source, target, ifcharge=True,
-                        ifdipole=True, dpweight=0.5, dipvec=dipvec,
-                        gradient=True, dtype=dtype)
+                    ifdipole=True, dpweight=0.5, dipvec=dipvec, gradient=True)
 time_form = time.time() - st
 st = time.time()
 pot3 = MAT.dot(charge)

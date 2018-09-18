@@ -18,8 +18,17 @@ from ..low_level.stokes import Stokes_Kernel_Form,  Stokes_Kernel_Self_Form
 ################################################################################
 # Applies
 
+def check_and_convert(x, bdy):
+    """
+    utility function to convert sources between linear/stacked forms
+    """
+    if x is not None and len(x.shape) == 1:
+        return x.reshape(2, bdy.N)
+    else:
+        return x
+
 def Stokes_Layer_Apply(source, target=None, forces=None, dipstr=None,
-                                                                backend='fly'):
+                                            backend='fly', out_type='flat'):
     """
     Stokes Layer Apply
 
@@ -30,35 +39,45 @@ def Stokes_Layer_Apply(source, target=None, forces=None, dipstr=None,
         dipstr,   optional, float(2, ns),   dipole strength
         weights,  optional, float(ns),      weights
         backend,  optional, str,            'fly', 'numba', 'FMM'
+        out_type, optional, str,            'flat' or 'stacked'
+
+    forces/dipstr can also be given as float(2*ns)
 
     If source is not target, then this function assumes that source and
         target have no coincident points
     If source is target, this function computes a naive quadrature,
         ignoring the i=j term in the sum
     """
+    forces = check_and_convert(forces, source)
+    dipstr = check_and_convert(dipstr, source)
+    dipvec = None if dipstr is None else source.get_stacked_normal(T=True)
     if target is None or source is target:
         backend = get_backend(source.N, source.N, backend)
-        return Stokes_Kernel_Self_Apply(
-                    source  = source.stacked_boundary_T,
+        out = Stokes_Kernel_Self_Apply(
+                    source  = source.get_stacked_boundary(T=True),
                     forces  = forces,
                     dipstr  = dipstr,
-                    dipvec  = source.stacked_normal_T,
+                    dipvec  = dipvec,
                     weights = source.weights,
                     backend = backend,
                 )
     else:
         backend = get_backend(source.N, target.N, backend)
-        return Stokes_Kernel_Apply(
-                    source  = source.stacked_boundary_T,
-                    target  = target.stacked_boundary_T,
+        out = Stokes_Kernel_Apply(
+                    source  = source.get_stacked_boundary(T=True),
+                    target  = target.get_stacked_boundary(T=True),
                     forces  = forces,
                     dipstr  = dipstr,
-                    dipvec  = source.stacked_normal_T,
+                    dipvec  = dipvec,
                     weights = source.weights,
                     backend = backend,
                 )
+    if out_type == 'flat':
+        return out.reshape(2*target.N)
+    else:
+        return out
 
-def Stokes_Layer_Singular_Apply(source, forces=None,dipstr=None,
+def Stokes_Layer_Singular_Apply(source, forces=None, dipstr=None,
                                                                 backend='fly'):
     """
     Stokes Layer Singular Apply
@@ -69,7 +88,11 @@ def Stokes_Layer_Singular_Apply(source, forces=None,dipstr=None,
         dipstr,   optional, float(2, ns),   dipole strength
         weights,  optional, float(ns),      weights
         backend,  optional, str,            'fly', 'numba', 'FMM'
+
+    forces/dipstr can also be given as float(2*ns)
     """
+    forces = check_and_convert(forces, source)
+    dipstr = check_and_convert(dipstr, source)
     uALP = np.zeros([2, source.N], dtype=float)
     if dipstr is not None:
         # evaluate the DLP
@@ -88,7 +111,10 @@ def Stokes_Layer_Singular_Apply(source, forces=None,dipstr=None,
         backend = get_backend(source.N, source.N, backend)
         uSLP = source.Stokes_SLP_Self_Apply(forces, backend=backend)
         ne.evaluate('uALP+uSLP', out=uALP)
-    return uALP
+    if out_type == 'flat':
+        return uALP.reshape(2*source.N)
+    else:
+        return uALP
 
 ################################################################################
 # Formations
@@ -111,10 +137,10 @@ def Stokes_Layer_Form(source, target=None, ifforce=False, fweight=None,
     If source is target, this function computes a naive quadrature,
         ignoring the i=j term in the sum
     """
-    dipvec = None if ifdipole is None else source.stacked_normal_T
+    dipvec = None if ifdipole is None else source.get_stacked_normal(T=True)
     if target is None or source is target:
         return Stokes_Kernel_Self_Form(
-                source   = source.stacked_boundary_T,
+                source   = source.get_stacked_boundary(T=True),
                 ifforce  = ifforce,
                 fweight  = fweight,
                 ifdipole = ifdipole,
@@ -124,8 +150,8 @@ def Stokes_Layer_Form(source, target=None, ifforce=False, fweight=None,
             )
     else:
         return Stokes_Kernel_Form(
-                source   = source.stacked_boundary_T,
-                target   = target.stacked_boundary_T,
+                source   = source.get_stacked_boundary(T=True),
+                target   = target.get_stacked_boundary(T=True),
                 ifforce  = ifforce,
                 fweight  = fweight,
                 ifdipole = ifdipole,
@@ -174,5 +200,5 @@ def Stokes_Layer_Singular_Form(source, ifforce=False, fweight=None,
         if fweight is None:
             ne.evaluate('ALP + SLP', out=ALP)
         else:
-            ne.evaluate('ALP + SLP*chweight', out=ALP)
+            ne.evaluate('ALP + SLP*fweight', out=ALP)
     return ALP

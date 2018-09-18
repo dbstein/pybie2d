@@ -19,12 +19,13 @@ def find_interior_points(source, target, boundary_acceptable=False):
     in_bounding_box = np.logical_and.reduce([ target.x > xmin, target.x < xmax,
                                               target.y > ymin, target.y < ymax])
     out_bounding_box = np.logical_not(in_bounding_box)
-    small_targ = PointSet(c=target.c[in_bounding_box], compute_tree=False)
+    small_targ = PointSet(c=target.c[in_bounding_box])
+    small_targ.compute_tree()
     wn = np.zeros(target.N, dtype=complex)
     wn[out_bounding_box] = 0.0
     # compute winding number via cauchy sums
     wn[in_bounding_box] = Cauchy_Layer_Apply(source, small_targ, \
-                                                    dipstr=source.ones_vec).real
+                                                dipstr=np.ones(source.N)).real
     wn = np.abs(wn)
     bad = np.logical_or(np.isnan(wn), np.isinf(wn))
     good = np.logical_not(bad)
@@ -39,7 +40,7 @@ def find_interior_points(source, target, boundary_acceptable=False):
     wn[q] = 0.0
     phys = wn > 0.5
     # brute force search
-    poly = mpl.path.Path(source.stacked_boundary)
+    poly = mpl.path.Path(source.get_stacked_boundary(T=False))
     xq = target.x[q]
     yq = target.y[q]
     tq = np.column_stack([xq, yq])

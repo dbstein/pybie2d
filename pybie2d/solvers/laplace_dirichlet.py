@@ -22,6 +22,7 @@ class LaplaceDirichletSolver(object):
 		self.type = solve_type
 		self.check_close = check_close
 		self.tolerance = 1e-12
+		self.outer = [] # used for lgmres algorithm
 		self.initialize()
 	def initialize(self):
 		self.shape = (self.collection.N, self.collection.N)
@@ -52,7 +53,12 @@ class LaplaceDirichletSolver(object):
 			self.preconditioner = sp.sparse.linalg.LinearOperator(
 				      		shape=self.shape, matvec=self.local_preconditioner)
 		if self.check_close:
-			backend = 'fly' if self.type == 'full_iterative' else 'preformed'
+			if self.type == 'full_iterative':
+				backend = 'fly'
+			elif self.type == 'iterative':
+				backend = 'preformed'
+			else:
+				backend = 'full preformed'
 			self.pairings = np.empty([self.collection.n_boundaries, self.collection.n_boundaries], dtype=object)
 			self.codes = np.empty([self.collection.n_boundaries, self.collection.n_boundaries], dtype=object)
 			for i in range(self.collection.n_boundaries):
@@ -67,11 +73,44 @@ class LaplaceDirichletSolver(object):
 					else:
 						self.pairings[i,j] = None
 						self.codes[i,j] = None
-		if self.type == 'form':
-			pass
+		if self.type == 'formed':
+			self.OP = np.empty([self.collection.N, self.collection.N], dtype=float)
+			# naive evals
+			for i in range(self.collection.n_boundaries):
+				i1, i2 = self.collection.get_inds(i)
+				iside = self.collection.sides[i]
+				ibdy = self.collection.boundaries[i]
+				for j in range(self.collection.n_boundaries):
+					if i == j:
+						self.OP[i1:i2, i1:i2] = Laplace_Layer_Singular_Form(ibdy, ifdipole=True, ifcharge=iside=='e')
+					else:
+						j1, j2 = self.collection.get_inds(j)
+						jbdy = self.collection.boundaries[j]
+						self.OP[j1:j2, i1:i2] = Laplace_Layer_Form(ibdy, jbdy, ifdipole=True, ifcharge=iside=='e')
+			# close corrections
+			if self.check_close:
+				for i in range(self.collection.n_boundaries):
+					i1, i2 = self.collection.get_inds(i)
+					for j in range(self.collection.n_boundaries):
+						if i != j:
+							j1, j2 = self.collection.get_inds(j)
+							pair = self.pairings[i,j]
+							code = self.codes[i,j]
+							try:
+								self.OP[j1:j2, i1:i2][pair.close_points, :] += pair.close_correctors[code].preparations['correction_mat']
+							except:
+								pass
+			# add in 0.5I terms
+			for i in range(self.collection.n_boundaries):
+				i1, i2 = self.collection.get_inds(i)
+				sign = 1.0 if self.collection.sides[i] == 'e' else -1.0
+				self.OP[i1:i2, i1:i2] += sign*0.5*np.eye(self.collection.boundaries[i].N)
+			self.inverse_OP = np.linalg.inv(self.OP)
 	def solve(self, bc, **kwargs):
 		if self.type == 'full_iterative' or self.type == 'iterative':
 			return self.solve_iterative(bc, **kwargs)
+		else:
+			return self.inverse_OP.dot(bc)
 	def solve_iterative(self, bc, disp=False, **kwargs):
 		counter = Gmres_Counter(disp)
 		operator = sp.sparse.linalg.LinearOperator(

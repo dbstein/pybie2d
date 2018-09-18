@@ -14,10 +14,9 @@ class PointSet(object):
         compute_tree:
             computes a kdtree for the nodes of x
     """
-    def __init__(   self, x=None, y=None, c=None, compute_tree=True):
+    def __init__(self, x=None, y=None, c=None):
         """
         Initialize a Point Set.
-        A kd-tree is computed by default.
 
         x (optional): real vector of x-coordinates
         y (optional): real vector of y-coordinates
@@ -42,23 +41,26 @@ class PointSet(object):
             self.x = self.c.real
             self.y = self.c.imag
         else:
-            raise StandardError('Not enough parameters provided to define \
-                Point Set.')
+            raise Exception('Not enough parameters provided to define Point Set.')
         self.N = self.x.shape[0]
-        self.stacked_boundary = np.column_stack([self.x, self.y])
-        self.stacked_boundary_T = self.stacked_boundary.T
-        self.tree_computed = False
-        if compute_tree:
-            self.compute_tree()
     # end __init__ function definition
+
+    def get_stacked_boundary(self, T=True):
+        self.stack_boundary()
+        return self.stacked_boundary_T if T else self.stacked_boundary
+
+    def stack_boundary(self):
+        if not hasattr(self, 'boundary_stacked'):
+            self.stacked_boundary = np.column_stack([self.x, self.y])
+            self.stacked_boundary_T = self.stacked_boundary.T
+            self.boundary_stacked = True
 
     def compute_tree(self):
         """
         Compute a kd-tree based on the coordinate values
         """
-        if not self.tree_computed:
-            self.tree = sp.spatial.cKDTree(self.stacked_boundary)
-            self.tree_computed = True
+        if not hasattr(self, 'tree'):
+            self.tree = sp.spatial.cKDTree(self.get_stacked_boundary(T=False))
     # end compute_tree function definition
 
     def reshape(self, f):

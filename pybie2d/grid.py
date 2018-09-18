@@ -29,7 +29,6 @@ class Grid(PointSet):
         self.Ny = Ny
         self.mask = mask
         self.periodic = periodic
-        self.shape = (self.Nx, self.Ny)
         self.endpoint = not self.periodic
         self.xv, self.xh = np.linspace(self.x_bounds[0], self.x_bounds[1],
                             self.Nx, retstep=True, endpoint=self.endpoint)
@@ -42,11 +41,8 @@ class Grid(PointSet):
         else:
             self.x = self.xg[mask].ravel()
             self.y = self.yg[mask].ravel()
-        self.c = self.x + 1j*self.y
-        self.N = self.Nx*self.Ny
-        self.stacked_boundary = np.column_stack([self.x, self.y])
-        self.stacked_boundary_T = self.stacked_boundary.T
-        self.tree_computed = False
+        super(Grid, self).__init__(self.x, self.y)
+        self.shape = (self.Nx, self.Ny)
     # end __init__ function definition
 
     def find_near_points_numpy(self, boundary, dist):

@@ -37,7 +37,7 @@ def star(N, x=0.0, y=0.0, r=1.0, a=0.5, f=3, rot=0.0, imag=True):
     c = (x+1j*y) + (r + r*a*np.cos(f*(t-rot)))*np.exp(1j*t)
     return imag_return(c, imag)
 
-def pot_leaf(N):
+def pot_leaf(N, x, y, r, imag=True):
     """
     Function giving a really nasty pot leaf boundary
     Parameters:

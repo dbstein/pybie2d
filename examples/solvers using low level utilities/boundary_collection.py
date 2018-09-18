@@ -35,10 +35,8 @@ Boundary_Collection = pybie2d.boundaries.collection.BoundaryCollection
 Evaluate_Tau = pybie2d.solvers.laplace_dirichlet.Evaluate_Tau
 LaplaceDirichletSolver = pybie2d.solvers.laplace_dirichlet.LaplaceDirichletSolver
 
-boundary1 = GSB(c=squish(NB1,r=2,b=0.3,rot=np.pi/4.0), 
-											compute_differentiation_matrix=False)
-boundary2 = GSB(c=star(NB2,x=0.75,y=0.75,r=0.3,a=0.4,f=7,rot=np.pi/3.0),
-											compute_differentiation_matrix=False)
+boundary1 = GSB(c=squish(NB1,r=2,b=0.3,rot=np.pi/4.0))
+boundary2 = GSB(c=star(NB2,x=0.75,y=0.75,r=0.3,a=0.4,f=7,rot=np.pi/3.0))
 
 boundary = Boundary_Collection()
 boundary.add([boundary1, boundary2], ['i', 'e'])

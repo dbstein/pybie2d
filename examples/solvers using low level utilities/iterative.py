@@ -31,15 +31,15 @@ Pairing = pybie2d.pairing.Pairing
 Close_Corrector = pybie2d.close.Close_Corrector
 Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Apply
 
-boundary1 = GSB(c=squish(NB1,r=2,b=0.3,rot=np.pi/4.0), 
-											compute_differentiation_matrix=False)
-boundary2 = GSB(c=star(NB2,x=0.75,y=0.75,r=0.3,a=0.4,f=7,rot=np.pi/3.0),
-											compute_differentiation_matrix=False)
+boundary1 = GSB(c=squish(NB1,r=2,b=0.3,rot=np.pi/4.0))
+boundary2 = GSB(c=star(NB2,x=0.75,y=0.75,r=0.3,a=0.4,f=7,rot=np.pi/3.0))
 # need a container for this, but hack for now
-boundary = PointSet(c=np.concatenate([boundary1.c, boundary2.c]),
-														compute_tree=False)
-boundary.stacked_normal_T = np.column_stack([boundary1.stacked_normal_T, boundary2.stacked_normal_T])
+boundary = PointSet(c=np.concatenate([boundary1.c, boundary2.c]))
+boundary.stacked_normal_T = np.column_stack([boundary1.get_stacked_normal(), boundary2.get_stacked_normal()])
 boundary.weights = np.concatenate([boundary1.weights, boundary2.weights])
+def temp(s,T=True):
+	return s.stacked_normal_T
+boundary.get_stacked_normal = temp
 
 def solution_func(x, y):
 	d2 = (x-0.75)**2 + (y-0.75)**2

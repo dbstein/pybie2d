@@ -2,6 +2,7 @@ import numpy as np
 import numexpr as ne
 import scipy as sp
 import scipy.linalg
+import numba
 
 def interpolate_to_p(x, p):
 	"""
@@ -33,8 +34,6 @@ def differentiate(x, d=1):
 		out = np.fft.ifft(xh*(1j*k)**d)
 	else:
 		out = np.fft.ifft(xh*(1j*k[:,None])**d, axis=0)
-	if x.dtype == float:
-		out = out.real
 	return out
 
 def differentiation_matrix(N):
@@ -58,4 +57,6 @@ def apply_circulant_matrix(x, c=None, c_hat=None, real_it=False):
 	else:
 		return prod
 
+def rowsum(x):
+	return x.dot(np.ones(x.shape[1]))
 

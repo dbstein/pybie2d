@@ -11,34 +11,20 @@ class Boundary(PointSet):
     Always instantiate Boundaries through the child classes
 
     Methods:
+        __init__:
+            pre-initialization routine
+            must be provided by child class
+        __init2__:
+            post-initialization routine to be called at end of child init
         compute_quadrature:
             the workhorse for this class - computes quadrature nodes and weights
-            must be provided by child class!
+            must be provided by child class
+        find_interior_points:
+            computes which points of target are interior to target or not
     """
-    def __init__(self):
-        self.target_set = False
+    def __init__(self, x=None, y=None, c=None):
+        super(Boundary, self).__init__(x, y, c)
     # end __init__ function definition
-
-    def __init2__(self, compute_quadrature, compute_tree):
-        """
-        Secondary initilization done by all Boundary child types after child
-        specific initialization is done
-        """
-        if compute_quadrature:
-            self.compute_quadrature()
-            self.quadrature_computed = True
-        else:
-            self.quadrature_computed = False
-
-        self.tree_computed = False
-        if compute_tree:
-            self.compute_tree()
-    # end __init__2 function definition
-
-    def compute_quadrature(self):
-        raise StandardError("'compute_quadrature' function must be provided \
-                by the child subclass of type Boundary")
-    # end compute_quadrature function
 
     def find_interior_points(self, target):
         """
@@ -48,6 +34,29 @@ class Boundary(PointSet):
         for the brute force search
 
         if the boundary type has a simple way to deal with this,
-        this method should probably be overwritten by the child class!
+        this method should be overwritten by the child class
         """
         return find_interior_points(self, target)
+
+    def decorate(self, decoration_name, *args, **kwargs):
+        """
+        Function for calling boundary decoraters
+        (Not sure this is necessary?)
+        """
+        getattr(self, decoration_name)(args, kwargs)
+
+    # Decorations shared across boundary classes
+    def stack_normal(self):
+        if not hasattr(self, 'normal_stacked'):
+            self.stacked_normal = np.column_stack([self.normal_x, self.normal_y])
+            self.stacked_normal_T = self.stacked_normal.T
+        self.normal_stacked = True
+    def get_stacked_normal(self, T=True):
+        self.stack_normal()
+        return self.stacked_normal_T if T else self.stacked_normal
+
+    def FMM_preparations(self):
+        if not hasattr(self, 'prepared_for_FMM'):
+            self.stack_boundary()
+            self.stack_normal()
+        self.prepared_for_FMM = True
