@@ -41,9 +41,9 @@ def _LKANC(sx, sy, tx, ty, charge, pot):
         for j in range(sx.shape[0]):
             temp[j] = np.log(temp[j])
         for j in range(sx.shape[0]):
-            output[i] += charge[j]*temp[j]
+            pot[i] += charge[j]*temp[j]
     for i in range(tx.shape[0]):
-        output[i] *= 0.5
+        pot[i] *= 0.5
 
 # @njit(parallel=True)
 # def lk_numba2(source, target, density):

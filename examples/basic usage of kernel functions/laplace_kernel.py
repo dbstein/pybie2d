@@ -24,18 +24,15 @@ charge = get_random([ns,], dtype)
 
 # using numba
 st = time.time()
-pot1 = Laplace_Kernel_Apply(source, target, charge=charge,
-            dipstr=0.5*charge, dipvec=dipvec, backend='numba', gradient=True)
+pot1 = Laplace_Kernel_Apply(source, target, charge=charge, backend='numba')
 time_first_numba = time.time() - st
 st = time.time()
-pot1, gradx1, grady1 = Laplace_Kernel_Apply(source, target, charge=charge,
-            dipstr=0.5*charge, dipvec=dipvec, backend='numba', gradient=True)
+pot1 = Laplace_Kernel_Apply(source, target, charge=charge, backend='numba')
 time_second_numba = time.time() - st
 
 # using FMM
 st = time.time()
-pot2 = Laplace_Kernel_Apply(source, target, charge=charge,
-                dipstr=0.5*charge, dipvec=dipvec, backend='FMM', gradient=True)
+pot2 = Laplace_Kernel_Apply(source, target, charge=charge, backend='FMM')
 time_fmm = time.time() - st
 
 
