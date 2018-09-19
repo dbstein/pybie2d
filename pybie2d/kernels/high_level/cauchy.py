@@ -12,8 +12,7 @@ from ... import have_fmm
 if have_fmm:
     from ... import FMM
 
-from ..low_level.cauchy import Cauchy_Kernel_Apply, Cauchy_Kernel_Self_Apply
-from ..low_level.cauchy import Cauchy_Kernel_Form,  Cauchy_Kernel_Self_Form
+from ..low_level.cauchy import Cauchy_Kernel_Apply, Cauchy_Kernel_Form
 
 ################################################################################
 # Applies
@@ -37,23 +36,16 @@ def Cauchy_Layer_Apply(source, target=None, dipstr=None, backend='fly'):
     If source is target, this function computes a naive quadrature,
         ignoring the i=j term in the sum
     """
-    if target is None or source is target:
-        backend = get_backend(source.N, source.N, backend)
-        return Cauchy_Kernel_Self_Apply(
-                    source  = source.c,
-                    dipstr  = dipstr,
-                    weights = source.complex_weights,
-                    backend = backend,
-                )
-    else:
-        backend = get_backend(source.N, target.N, backend)
-        return Cauchy_Kernel_Apply(
-                    source  = source.c,
-                    target  = target.c,
-                    dipstr  = dipstr,
-                    weights = source.complex_weights,
-                    backend = backend,
-                )
+    if target is None:
+        target = source
+    backend = get_backend(source.N, source.N, backend)
+    return Cauchy_Kernel_Apply(
+                source  = source.c,
+                target  = target.c,
+                dipstr  = dipstr,
+                weights = source.complex_weights,
+                backend = backend,
+            )
 
 def Cauchy_Layer_Form(source, target=None):
     """
@@ -67,14 +59,10 @@ def Cauchy_Layer_Form(source, target=None):
     If source is target, this function computes a naive quadrature,
         ignoring the i=j term in the sum
     """
-    if target is None or source is target:
-        return Cauchy_Kernel_Self_Form(
-                    source   = source.c,
-                    weights  = source.complex_weights,
-                )
-    else:
-        return Cauchy_Kernel_Form(
-                    source  = source.c,
-                    target  = target.c,
-                    weights = source.complex_weights,
-                )
+    if target is None:
+        target = source
+    return Cauchy_Kernel_Form(
+                source  = source.c,
+                target  = target.c,
+                weights = source.complex_weights,
+            )

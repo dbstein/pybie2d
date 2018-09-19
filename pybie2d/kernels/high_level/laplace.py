@@ -12,8 +12,7 @@ from ... import have_fmm
 if have_fmm:
     from ... import FMM
 
-from ..low_level.laplace import Laplace_Kernel_Apply
-from ..low_level.laplace import Laplace_Kernel_Form
+from ..low_level.laplace import Laplace_Kernel_Apply, Laplace_Kernel_Form
 
 ################################################################################
 # Applies
