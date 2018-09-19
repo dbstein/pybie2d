@@ -33,6 +33,12 @@ class Pairing(object):
                                                         self.close_distance)
         self.close_targ = PointSet(c=self.target.c[self.close_points])
         self.close_correctors = {}
+        self.close_kernels = {}
+        self.Close_Correction_Functions = {
+            'null' : self.Close_Correction_Null,
+            'laplace' : self.Close_Correction_Laplace,
+            'stokes' : self.Close_Correction_Stokes,
+        }
     # end __init__ function definition
 
     def Setup_Close_Corrector(self, do_DLP=False, DLP_weight=None,
@@ -42,15 +48,28 @@ class Pairing(object):
             self.close_correctors[code] = \
                 Close_Corrector(self.source, self.close_targ, self.side, do_DLP,
                                 DLP_weight, do_SLP, SLP_weight, kernel, backend)
+            self.close_kernels[code] = kernel
         else:
-            self.close_correctors[code] = Null_Corrector
+            self.close_correctors[code] = None
+            self.close_kernels[code] = 'null'
         return code
 
     def Close_Correction(self, u, tau, code):
+        kernel = self.close_kernels[code]
+        func = self.Close_Correction_Functions[kernel]
+        func(u, tau, code)
+    def Close_Correction_Null(self, u, tau, code):
+        pass
+    def Close_Correction_Laplace(self, u, tau, code):
         u[self.close_points] += self.close_correctors[code](tau)
-
-def Null_Corrector(tau):
-    return 0.0
+    def Close_Correction_Stokes(self, U, tau, code):
+        C = self.close_correctors[code](tau)
+        CN = int(C.shape[0]/2)
+        N = int(U.shape[0]/2)
+        u = U[:N]
+        v = U[N:]
+        u[self.close_points] += C[:CN]
+        v[self.close_points] += C[CN:]
 
 class CollectionPairing(object):
     """

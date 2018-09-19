@@ -26,8 +26,9 @@ Stokes_Layer_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Form
 Stokes_Layer_Singular_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Singular_Form
 Stokes_Layer_Apply = pybie2d.kernels.high_level.stokes.Stokes_Layer_Apply
 Compensated_Stokes_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Stokes_Full_Form
-
+Compensated_Stokes_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Stokes_Apply
 Compensated_Laplace_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Full_Form
+Pairing = pybie2d.pairing.Pairing
 
 ################################################################################
 # define problem
@@ -131,3 +132,17 @@ vph[close_pts] += correction[close_trg.N:]
 
 err_plot(uph, solution_func_u)
 err_plot(vph, solution_func_v)
+
+################################################################################
+# correct with pair routines (on the fly)
+
+Up1 = Up.copy()
+# to show how much easier the Pairing utility makes things
+pair = Pairing(boundary, gridp, 'e', 1e-12)
+code = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, kernel='stokes')
+pair.Close_Correction(Up1.ravel(), tau, code)
+
+err_plot(Up1[0], solution_func_u)
+err_plot(Up1[1], solution_func_v)
+
+

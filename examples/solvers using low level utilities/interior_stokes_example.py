@@ -127,28 +127,6 @@ err_plot(uph, solution_func_u)
 err_plot(vph, solution_func_v)
 
 ################################################################################
-# correct with close evaluation (preformed)
-
-if N <= 1000:
-	uph = up.copy()
-	vph = vp.copy()
-	# generate close eval matrix
-	close_mat = Compensated_Stokes_Full_Form(boundary, close_trg, 'i', do_DLP=True, \
-	                DLP_weight=None, do_SLP=False, SLP_weight=None)
-	# generate naive matrix
-	naive_mat = Stokes_Layer_Form(boundary, close_trg, ifdipole=True)
-	# construct close correction matrix
-	correction_mat = close_mat.real - naive_mat
-
-	# find the correction and fix the naive solution
-	correction = correction_mat.dot(tau)
-	uph[close_pts] += correction[:close_trg.N]
-	vph[close_pts] += correction[close_trg.N:]
-
-	err_plot(uph, solution_func_u)
-	err_plot(vph, solution_func_v)
-
-################################################################################
 ##### solve problem the easy way ###############################################
 ################################################################################
 
@@ -178,31 +156,34 @@ gridp = Grid([-2,2], N, [-2,2], N, mask=phys, periodic=True)
 # evaluate at the target points
 Up = Stokes_Layer_Apply(boundary, gridp, dipstr=tau, backend='FMM',
 															out_type='stacked')
-up = Up[0]
-vp = Up[1]
 
 ################################################################################
 # correct with pair routines (on the fly)
 
-uph = up.copy()
-vph = up.copy()
+Up1 = Up.copy()
 # to show how much easier the Pairing utility makes things
 pair = Pairing(boundary, gridp, 'i', 1e-12)
 code2 = pair.Setup_Close_Corrector(do_DLP=True, kernel='stokes')
-pair.Close_Correction(uph, tau, code2)
+pair.Close_Correction(Up1.ravel(), tau, code2)
+up = Up1[0]
+vp = Up1[1]
 
-err_plot(uph)
+err_plot(up, solution_func_u)
+err_plot(vp, solution_func_v)
 
 ################################################################################
 # correct with pair routines (preformed)
 
-if N <= 1000:
-	uph = up.copy()
-	# to show how much easier the Pairing utility makes things
-	code1 = pair.Setup_Close_Corrector(do_DLP=True, backend='preformed')
-	pair.Close_Correction(uph, tau, code1)
+Up1 = Up.copy()
+# to show how much easier the Pairing utility makes things
+code1 = pair.Setup_Close_Corrector(do_DLP=True, kernel='stokes', backend='full preformed')
+pair.Close_Correction(Up1.ravel(), tau, code1)
 
-	err_plot(uph)
+up = Up1[0]
+vp = Up1[1]
+
+err_plot(up, solution_func_u)
+err_plot(vp, solution_func_v)
 
 ################################################################################
 # generate a target that heads up to the boundary

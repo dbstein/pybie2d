@@ -11,10 +11,25 @@ from ..misc.basic_functions import interpolate_to_p, differentiate, \
                 differentiation_matrix, apply_circulant_matrix, rowsum
 from .boundary import Boundary
 from ..kernels.high_level.laplace import Laplace_Layer_Form, Laplace_Layer_Apply
+from ..kernels.high_level.stokes import Stokes_Layer_Form, Stokes_Layer_Apply
 from ..kernels.high_level.cauchy import Cauchy_Layer_Form, Cauchy_Layer_Apply
 from .. import have_fmm
 if have_fmm:
     from .. import FMM
+
+# decorater for any functions that require Kress Precomputations
+def do_Kress_Preparations(func):
+    def inner_function(self, *args, **kwargs):
+        self.Kress_Preparations()
+        return func(self, *args, **kwargs)
+    return inner_function
+
+# decorater for any functions that require CSLP/Close Eval Precomputations
+def do_Close_Preparations(func):
+    def inner_function(self, *args, **kwargs):
+        self.Close_Preparations()
+        return func(self, *args, **kwargs)
+    return inner_function
 
 class Global_Smooth_Boundary(Boundary):
     """
@@ -76,9 +91,9 @@ class Global_Smooth_Boundary(Boundary):
     Decorations
     """
 
-    def Kress_Perparations(self):
+    def Kress_Preparations(self):
         """
-        Constructs vectors used to speed up Kress/CSLP Routines
+        Constructs vectors used to speed up Kress Routines
         """
         if not hasattr(self, 'Kress_Vectors_Formed'):
             v1 = 4.0*np.sin(np.pi*np.arange(self.N)/self.N)**2
@@ -87,15 +102,23 @@ class Global_Smooth_Boundary(Boundary):
             self.Kress_V1_hat = np.fft.fft(self.Kress_V1)
             v2 = np.abs(self.k)
             v2[0] = np.Inf
-            IV = 1.0/v2
-            self.Kress_V2 = 0.5*np.fft.ifft(IV).real/self.dt
-            self.Kress_V2_hat = 0.5*IV/self.dt
+            self.Kress_IV = 1.0/v2
+            self.Kress_V2 = 0.5*np.fft.ifft(self.Kress_IV).real/self.dt
+            self.Kress_V2_hat = 0.5*self.Kress_IV/self.dt
             self.Kress_V_hat = self.Kress_V1_hat/self.N + self.Kress_V2_hat
             self.Kress_V = self.Kress_V1/self.N + self.Kress_V2
-            RVe = IV.copy()
+            self.Kress_Vectors_Formed = True
+
+    def Close_Preparations(self):
+        """
+        Constructs vectors used to speed up CSLP/Close Routines
+        """
+        if not hasattr(self, 'Close_Vectors_Formed'):
+            self.Kress_Preparations()
+            RVe = self.Kress_IV.copy()
             RVe[int(self.N/2)+1:] = 0.0
             RVe[int(self.N/2)] /= 2
-            RVi = IV.copy()
+            RVi = self.Kress_IV.copy()
             RVi[:int(self.N/2)] = 0.0
             self.Kress_VRe = np.fft.ifft(RVi)
             self.Kress_VRi = np.fft.ifft(RVe)
@@ -108,7 +131,10 @@ class Global_Smooth_Boundary(Boundary):
             self.sawlog.imag = np.unwrap(self.sawlog.imag)
             self.inf_scale = self.complex_weights/(self.c-self.get_inside_point()) \
                                                                     / (2.0j*np.pi)
-        self.Kress_Vectors_Formed = True
+            self.NF = int(np.ceil(2.2*self.N)/2.0)*2
+            self.sfc = sp.signal.resample(self.c, self.NF)
+            self.fsrc = Global_Smooth_Boundary(c=self.sfc)
+            self.Close_Vectors_Formed = True
 
     def get_differentiation_matrix(self):
         if not hasattr(self, 'differentiation_matrix'):
@@ -122,11 +148,18 @@ class Global_Smooth_Boundary(Boundary):
         computed as the average of the boundary nodes, which may not be inside
         c should be an imaginary float, with c.real=x, c.imag=y
         """
+        good = self._test_inside_point(c)
+        if not good:
+            warnings.warn('Inside point failed basic test, is it actually inside?')
         self.inside_point_c = c
+
     def get_inside_point(self):
         if not hasattr(self, 'inside_point_c'):
-            warnings.warn('Inside point is being computed as mean of boundary points, this may not actually be inside!')
-            self.inside_point_c = np.sum(self.c)/self.N
+            candidate = np.sum(self.c)/self.N
+            good = self._test_inside_point(candidate)
+            if not good:
+                warnings.warn('Inside point computed as mean, failed basic test, is it actually inside?')
+            self.inside_point_c = candidate
         return self.inside_point_c
 
     #########################
@@ -204,14 +237,12 @@ class Global_Smooth_Boundary(Boundary):
     #### Private Methods ####
     #########################
 
-    def _test_inside_point(self, eps=1e-10):
+    def _test_inside_point(self, candidate, eps=1e-10):
         """
         Test whether the provided or generated inside point is acceptable
         returns True if the point is okay, False if its not
         """
-        if not self.quadrature_computed:
-            self.compute_quadrature()
-        test_value = np.sum(self.complex_weights/(self.c-self.get_inside_point()))
+        test_value = np.sum(self.complex_weights/(self.c-candidate))
         return np.abs(test_value - 2.0j*np.pi) < eps
     # end _test_inside_point function
 ##### End of Global_Smooth_Boundary class definition ###########################
@@ -220,22 +251,26 @@ class Global_Smooth_Boundary(Boundary):
 #### Kress Self-Evaluation routines for Laplace SLP ############################
 ################################################################################
 
-def Laplace_SLP_Self_Kress_Form(source):
+@do_Kress_Preparations
+def Laplace_SLP_Self_Kress_Form(source, store=True):
     if not hasattr(source, 'Laplace_Self_Kress_Matrix'):
-        source.Kress_Perparations()
         weights = source.weights
         C = sp.linalg.circulant(source.Kress_V)
         A = Laplace_Layer_Form(source, ifcharge=True)
         np.fill_diagonal(A, -np.log(source.speed)/(2*np.pi)*weights)
-        source.Laplace_Self_Kress_Matrix = ne.evaluate('A + C*weights')
-    return source.Laplace_Self_Kress_Matrix
+        Laplace_Self_Kress_Matrix = ne.evaluate('A + C*weights')
+        if store:
+           source.Laplace_Self_Kress_Matrix = Laplace_Self_Kress_Matrix 
+        return Laplace_Self_Kress_Matrix 
+    else:
+        return source.Laplace_Self_Kress_Matrix 
 
+@do_Kress_Preparations
 def Laplace_SLP_Self_Kress_Apply(source, tau, backend='fly'):
     """
     source, required, global_smooth_boundary, source
     tau,   required, dtype(ns), density
     """
-    source.Kress_Perparations()
     weighted_tau = tau*source.weights
     u1 = Laplace_Layer_Apply(source, charge=tau, backend=backend)
     u1 -= np.log(source.speed)/(2*np.pi)*weighted_tau
@@ -247,32 +282,37 @@ def Laplace_SLP_Self_Kress_Apply(source, tau, backend='fly'):
 #### Kress Self-Evaluation routines for Stokes  SLP ############################
 ################################################################################
 
-def Stokes_SLP_Self_Kress_Form(source):
-    mu = 1.0
-    sx = source.x
-    sxT = sx[:,None]
-    sy = source.y
-    syT = sy[:,None]
-    dx = ne.evaluate('sxT-sx')
-    dy = ne.evaluate('syT-sy')
-    irr = ne.evaluate('1.0/(dx*dx + dy*dy)')
-    weights = source.weights/(4.0*np.pi*mu)
-    A = np.empty((2*source.N,2*source.N), dtype=float)
-    A00 = ne.evaluate('weights*dx*dx*irr', out=A[:source.N,:source.N])
-    A01 = ne.evaluate('weights*dx*dy*irr', out=A[:source.N,source.N:])
-    A10 = ne.evaluate('A01', out=A[source.N:,:source.N])
-    A11 = ne.evaluate('weights*dy*dy*irr', out=A[source.N:,source.N:])
-    tx = source.tangent_x
-    ty = source.tangent_y
-    np.fill_diagonal(A00, ne.evaluate('weights*tx*tx'))
-    np.fill_diagonal(A01, ne.evaluate('weights*tx*ty'))
-    np.fill_diagonal(A10, ne.evaluate('weights*tx*ty'))
-    np.fill_diagonal(A11, ne.evaluate('weights*ty*ty'))
-    S = Laplace_SLP_Self_Kress_Form(source)
-    muS = ne.evaluate('0.5*mu*S')
-    A00 = ne.evaluate('A00 + muS', out=A[:source.N,:source.N])
-    A11 = ne.evaluate('A11 + muS', out=A[source.N:,source.N:])
-    return A
+def Stokes_SLP_Self_Kress_Form(source, store=True):
+    if not hasattr(source, 'Stokes_Self_Kress_Matrix'):
+        mu = 1.0
+        sx = source.x
+        sxT = sx[:,None]
+        sy = source.y
+        syT = sy[:,None]
+        dx = ne.evaluate('sxT-sx')
+        dy = ne.evaluate('syT-sy')
+        irr = ne.evaluate('1.0/(dx*dx + dy*dy)')
+        weights = source.weights/(4.0*np.pi*mu)
+        A = np.empty((2*source.N,2*source.N), dtype=float)
+        A00 = ne.evaluate('weights*dx*dx*irr', out=A[:source.N,:source.N])
+        A01 = ne.evaluate('weights*dx*dy*irr', out=A[:source.N,source.N:])
+        A10 = ne.evaluate('A01', out=A[source.N:,:source.N])
+        A11 = ne.evaluate('weights*dy*dy*irr', out=A[source.N:,source.N:])
+        tx = source.tangent_x
+        ty = source.tangent_y
+        np.fill_diagonal(A00, ne.evaluate('weights*tx*tx'))
+        np.fill_diagonal(A01, ne.evaluate('weights*tx*ty'))
+        np.fill_diagonal(A10, ne.evaluate('weights*tx*ty'))
+        np.fill_diagonal(A11, ne.evaluate('weights*ty*ty'))
+        S = Laplace_SLP_Self_Kress_Form(source, store)
+        muS = ne.evaluate('0.5*mu*S')
+        A00 = ne.evaluate('A00 + muS', out=A[:source.N,:source.N])
+        A11 = ne.evaluate('A11 + muS', out=A[source.N:,source.N:])
+        if store:
+            source.Stokes_Self_Kress_Matrix = A
+        return A
+    else:
+        return source.Stokes_Self_Kress_Matrix
 
 def Stokes_SLP_Self_Kress_Apply(source, tau, backend='fly'):
     """
@@ -300,6 +340,7 @@ def Stokes_SLP_Self_Kress_Apply(source, tau, backend='fly'):
 # this is to avoid forming the differentiation matrix, since
 # the differentiate function gives better error than applying the
 # differentiation matrix itself
+# Also it avoids an expensive MAT-MAT in the formation stage
 def _Laplace_Close_Correction_Function_Preformed(tau, preparation):
     w = np.zeros(tau.shape, dtype=complex)
     if preparation['do_DLP']:
@@ -392,95 +433,40 @@ def Get_Laplace_Close_Correction_Function(source, target, side, do_DLP,
 def _Stokes_Close_Correction_Function_Full_Preformed(tau, preparation):
     return preparation['correction_mat'].dot(tau)
 
-# def _Stokes_Close_Correction_Function_Apply(tau, preparation):
-#     NB = preparation['NB']
-#     NF = preparation['NF']
-#     NT = preparation['NT']
-#     source = preparation['source']
-#     fsource = preparation['fsource']
-#     target = preparation['target']
-#     side = preparation['side']
-#     do_DLP = preparation['do_DLP']
-#     do_SLP = preparation['do_SLP']
-#     SLP_weight = preparation['SLP_weight']
-#     DLP_weight = preparation['DLP_weight']
-#     backend = preparation['backend']
-#     taux = tau[:NB]
-#     tauy = tau[NB:]
-#     tauc = taux + 1j*tauy
-#     taudot = source.x*taux + source.y*tauy
-#     ftauc = sp.signal.resample(tauc, NF)
-#     ftauc_div = ftauc / fsource.normal_c
-#     u1 = np.zeros(NT, dtype=complex)
-#     if preparation['do_DLP']:
-#         IX = fsource.normal_x*ftauc_div
-#         IY = fsource.normal_y*ftauc_div
-#         u1a = Compensated_Laplace_Apply(source, target, side, IX, do_DLP=do_DLP,
-#         DLP_weight=DLP_weight, main_type='real', backend=backend)
-#         u1b = Compensated_Laplace_Apply(source, target, side, IY, do_DLP=do_DLP,
-#         DLP_weight=DLP_weight, main_type='real', backend=backend)
-#         u1 += u1a + 1j*u1b
-#     if preparation['do_SLP']:
-#         u1a = Compensated_Laplace_Apply(source, target, side, taux, do_SLP=do_SLP,
-#         SLP_weight=SLP_weight, main_type='real', backend=backend)
-#         u1b = Compensated_Laplace_Apply(source, target, side, tauy, do_SLP=do_SLP,
-#         SLP_weight=SLP_weight, main_type='real', backend=backend)
-#         u1 += u1a + 1j*u1b
-#     _, u2 = Compensated_Laplace_Apply(source, target, side, taudot, do_DLP=do_DLP, 
-#         DLP_weight=DLP_weight, do_SLP=do_SLP, SLP_weight=SLP_weight,
-#         main_type='real', gradient=True, gradient_type='complex', backend=backend)
-#     _, u3 = Compensated_Laplace_Apply(source, target, side, taux, do_DLP=do_DLP, 
-#         DLP_weight=DLP_weight, do_SLP=do_SLP, SLP_weight=SLP_weight,
-#         main_type='real', gradient=True, gradient_type='complex', backend=backend)
-#     _, u4 = Compensated_Laplace_Apply(source, target, side, tauy, do_DLP=do_DLP, 
-#         DLP_weight=DLP_weight, do_SLP=do_SLP, SLP_weight=SLP_weight,
-#         main_type='real', gradient=True, gradient_type='complex', backend=backend)
-#     ut = u1 + np.conj(u2 - target.x*u3 - target.x*u4)
-#     uf = 
-
-
-    # # get the 'fine source', and associated cauchy matrix
-    # NF = int(np.ceil(2.2*src.N)/2.0)*2
-    # sfc = sp.signal.resample(src.c, NF)
-    # fsrc = Global_Smooth_Boundary(sfc.real, sfc.imag, compute_tree=False)
-    # # get taux, tauy, tauc
-    # taux = tau[:src.N]
-    # tauy = tau[src.N:]
-    # tauc = taux + 1j*tauy
-    # # resample tauc
-    # ftauc = sp.signal.resample(tauc, NF)
-    # # Step 1
-    # u1 = np.zeros(trg.N, dtype=complex)
-    # if DLP:
-    #     IX = (fsrc.normal_x/fsrc.normal_c)*ftauc
-    #     IY = (fsrc.normal_y/fsrc.normal_c)*ftauc
-    #     u1a = _compensated_laplace_apply_direct(fsrc, trg, IX, side, DLP=DLP_VAL)
-    #     u1b = _compensated_laplace_apply_direct(fsrc, trg, IY, side, DLP=DLP_VAL)
-    #     u1 += u1a.real + 1j*u1b.real
-    # if SLP:
-    #     u1a = _compensated_laplace_apply_direct(src, trg, taux, side, SLP=SLP_VAL)
-    #     u1b = _compensated_laplace_apply_direct(src, trg, tauy, side, SLP=SLP_VAL)
-    #     u1 += u1a.real + 1j*u1b.real
-    # # Step 2
-    # _, u2 = _compensated_laplace_apply_direct(src, trg, src.x*taux + src.y*tauy, side, DLP=DLP_VAL, SLP=SLP_VAL, gradient=True)
-    # # Step 3 and 4
-    # _, u3 = trg.x * _compensated_laplace_apply_direct(src, trg, taux, side, DLP=DLP_VAL, SLP=SLP_VAL, gradient=True)
-    # _, u4 = trg.y * _compensated_laplace_apply_direct(src, trg, tauy, side, DLP=DLP_VAL, SLP=SLP_VAL, gradient=True)
-    # # add these up
-    # u = u1 + np.conj(u2 - u3 - u4)
-
-
+def _Stokes_Close_Correction_Function_Apply(tau, preparation):
+    v1 = Compensated_Stokes_Apply(
+            preparation['source'],
+            preparation['target'],
+            side       = preparation['side'],
+            tau        = tau,
+            do_DLP     = preparation['do_DLP'], 
+            DLP_weight = preparation['DLP_weight'],
+            do_SLP     = preparation['do_SLP'], 
+            SLP_weight = preparation['SLP_weight'],
+            backend    = preparation['backend']
+        )
+    ch_adj = 1.0 if preparation['SLP_weight'] is None \
+                                    else preparation['SLP_weight']
+    ds_adj = 1.0 if preparation['DLP_weight'] is None \
+                                    else preparation['DLP_weight']
+    ch = tau*ch_adj*int(preparation['do_SLP'])
+    ds = tau*ds_adj*int(preparation['do_DLP'])
+    v2 = Stokes_Layer_Apply(
+            source     = preparation['source'],
+            target     = preparation['target'],
+            forces     = ch,
+            dipstr     = ds,
+            backend    = preparation['backend']
+        )
+    return v1 - v2
 
 def Get_Stokes_Close_Correction_Function(source, target, side, do_DLP,
                                     DLP_weight, do_SLP, SLP_weight, backend):
-    if backend == 'preformed':
-        preparation = {}
-        return preparation
-    elif backend == 'full preformed':
+    if backend == 'full preformed':
         close_mat = Compensated_Stokes_Full_Form(source, target, side, do_DLP, 
                                                 DLP_weight, do_SLP, SLP_weight)
-        naive_mat = Stokes_Layer_Form(source, target, ifcharge=do_SLP,
-                    chweight=SLP_weight, ifdipole=do_DLP, dpweight=DLP_weight)
+        naive_mat = Stokes_Layer_Form(source, target, ifforce=do_SLP,
+                    fweight=SLP_weight, ifdipole=do_DLP, dpweight=DLP_weight)
         correction_mat = close_mat.real - naive_mat
         preparation = {
             'do_DLP'         : do_DLP,
@@ -499,13 +485,13 @@ def Get_Stokes_Close_Correction_Function(source, target, side, do_DLP,
             'SLP_weight'   : SLP_weight,
             'backend'      : backend,
         }
-        return preparation, _Stokes_Close_Correction_Function_Fly
+        return preparation, _Stokes_Close_Correction_Function_Apply
 
 ################################################################################
 #### Cauchy Compensated Evaluation - User Facing Functions #####################
 ################################################################################
 
-#### IN ORDER TO GET THIS TO WORK, NEED TO IMPLEMENT THE GRADIENT SCHEMES FOR LAPLACE!
+@do_Close_Preparations
 def Compensated_Stokes_Full_Form(source, target, side, do_DLP=False,
                             DLP_weight=None, do_SLP=False, SLP_weight=None):
     # adjust the SLP/DLP weights for calls to Laplace functions
@@ -527,10 +513,8 @@ def Compensated_Stokes_Full_Form(source, target, side, do_DLP=False,
                     do_SLP=do_SLP, SLP_weight=SLP_weight, gradient=True,
                     main_type='real', gradient_type='complex')
     if do_DLP:
-        # get the 'fine source', and associated cauchy matrix
-        NF = int(np.ceil(2.2*source.N)/2.0)*2
-        sfc = sp.signal.resample(source.c, NF)
-        fsrc = Global_Smooth_Boundary(sfc.real, sfc.imag)
+        NF = source.NF
+        fsrc = source.fsrc
         # construct resampling matrix
         RS = sp.signal.resample(np.eye(source.N), NF)
         # array that takes 2*src.N real density to resampled complex density
@@ -567,11 +551,41 @@ def Compensated_Stokes_Full_Form(source, target, side, do_DLP=False,
     MAT[target.N:, :] = MM.imag
     return MAT
 
+@do_Close_Preparations
 def Compensated_Stokes_Apply(source, target, side, tau, do_DLP=False,
-                            DLP_weight=None, do_SLP=False, SLP_weight=None):
+                DLP_weight=None, do_SLP=False, SLP_weight=None, backend='fly'):
     # adjust the SLP/DLP weights for calls to Laplace functions
     DLP_weight = 1.0 if DLP_weight is None else 1.0*DLP_weight
-    SLP_weight = 0.5 if SLP_weight is None else 0.5*SLP_weight   
+    SLP_weight = 0.5 if SLP_weight is None else 0.5*SLP_weight
+    NF = source.NF
+    fsrc = source.fsrc
+    taux = tau[:source.N]
+    tauy = tau[source.N:]
+    tauc = taux + 1j*tauy
+    ftauc = sp.signal.resample(tauc, NF)
+    # step 1
+    u1 = np.zeros(target.N, dtype=complex)
+    if do_DLP:
+        IX = (fsrc.normal_x/fsrc.normal_c)*ftauc
+        IY = (fsrc.normal_y/fsrc.normal_c)*ftauc
+        u1a = Compensated_Laplace_Apply(fsrc, target, side, IX, do_DLP=True, DLP_weight=DLP_weight, backend=backend, main_type='complex')
+        u1b = Compensated_Laplace_Apply(fsrc, target, side, IY, do_DLP=True, DLP_weight=DLP_weight, backend=backend, main_type='complex')
+        u1 += u1a.real + 1j*u1b.real
+    if do_SLP:
+        u1a = Compensated_Laplace_Apply(source, target, side, taux, do_SLP=True, SLP_weight=SLP_weight, backend=backend)
+        u1b = Compensated_Laplace_Apply(source, target, side, tauy, do_SLP=True, SLP_weight=SLP_weight, backend=backend)
+        u1 += u1a + 1j*u1b
+    # step 2
+    tauh = source.x*taux + source.y*tauy
+    _, u2 = Compensated_Laplace_Apply(source, target, side, tauh, do_SLP=do_SLP, do_DLP=do_DLP, SLP_weight=SLP_weight, DLP_weight=DLP_weight, gradient=True, gradient_type='complex', backend=backend)
+    # step 3 and 4
+    _, u3 = Compensated_Laplace_Apply(source, target, side, taux, do_SLP=do_SLP, do_DLP=do_DLP, SLP_weight=SLP_weight, DLP_weight=DLP_weight, gradient=True, gradient_type='complex', backend=backend)
+    _, u4 = Compensated_Laplace_Apply(source, target, side, tauy, do_SLP=do_SLP, do_DLP=do_DLP, SLP_weight=SLP_weight, DLP_weight=DLP_weight, gradient=True, gradient_type='complex', backend=backend)
+    u3 *= target.x
+    u4 *= target.y
+    # add everything up
+    u = u1 + np.conj(u2 - u3 - u4)
+    return np.concatenate([u.real, u.imag])
 
 def Compensated_Laplace_Full_Form(source, target, side, do_DLP=False,
                 DLP_weight=None, do_SLP=False, SLP_weight=None, gradient=False,
@@ -736,27 +750,39 @@ def Compensated_Laplace_Apply(source, target, side, tau, do_DLP=False,
 ################################################################################
 
 ##### CSLP Matrix Form/Apply ###################################################
-def Complex_SLP_Kress_Split_Nystrom_Self_Form(source, side):
-    weights = source.weights
-    speed = source.speed
-    scaled_weights = weights/(2*np.pi)
-    source_c = source.c
-    scT = source_c[:,None]
-    kress_x = source.Kress_x
-    kress_xT = kress_x[:,None]
-    xd = ne.evaluate('kress_xT-kress_x')
-    d = ne.evaluate('scT - source_c')
-    S = ne.evaluate('log(xd/d)') # appears to be no phase jumps!
-        # this fails when x is not star-shaped?!
-    SI = S.imag
-    np.fill_diagonal(SI, np.concatenate([ SI.diagonal(1), (SI[-1,0],) ]) )
-    SI = np.unwrap(SI)
-    S = ne.evaluate('S*scaled_weights', out=S)
-    np.fill_diagonal(S, source.CSLP_limit)
-    VR = source.Kress_VRi if side == 'i' else source.Kress_VRe
-    R = sp.linalg.circulant(VR)
-    S = ne.evaluate('S + R*speed')
-    return S
+@do_Close_Preparations
+def Complex_SLP_Kress_Split_Nystrom_Self_Form(source, side, store=True):
+    if not hasattr(source, 'CSLP_Base'):
+        weights = source.weights
+        speed = source.speed
+        scaled_weights = weights/(2*np.pi)
+        source_c = source.c
+        scT = source_c[:,None]
+        kress_x = source.Kress_x
+        kress_xT = kress_x[:,None]
+        xd = ne.evaluate('kress_xT-kress_x')
+        d = ne.evaluate('scT - source_c')
+        S = ne.evaluate('log(xd/d)') # appears to be no phase jumps!
+            # this fails when x is not star-shaped?!
+        SI = S.imag
+        np.fill_diagonal(SI, np.concatenate([ SI.diagonal(1), (SI[-1,0],) ]) )
+        SI = np.unwrap(SI)
+        S = ne.evaluate('S*scaled_weights', out=S)
+        np.fill_diagonal(S, source.CSLP_limit)
+        if store:
+            source.CSLP_Base = S
+    else:
+        S = source.CSLP_Base
+    attr = 'CSLP_' + side
+    if not hasattr(source, attr):
+        RV = source.Kress_VRi if side == 'i' else source.Kress_VRe
+        R = sp.linalg.circulant(RV)
+        SR = ne.evaluate('S + R*speed')
+        if store:
+            setattr(source, attr, SR)
+    else:
+        SR = getattr(source, attr)
+    return SR
 
 @numba.njit(parallel=True)
 def _Complex_SLP_Kress_Split_Nystrom_Self_Apply_numba(s, p, tau, diag, pot):
@@ -878,6 +904,7 @@ def _Complex_SLP_Kress_Split_Nystrom_Self_Apply_numba_old(s, p, tau, diag, pot):
 #     u3 = apply_circulant_matrix(tau*source.speed, c_hat=circ, real_it=False)
 #     return u1 + u2 + u3
 
+@do_Close_Preparations
 def Complex_SLP_Kress_Split_Nystrom_Self_Apply(source, side, tau):
     u1 = np.empty_like(source.c)
     _Complex_SLP_Kress_Split_Nystrom_Self_Apply_numba(source.c, \
@@ -975,40 +1002,43 @@ def compensated_laplace_dlp_preapply(source, side, tau, backend='fly'):
     return u
 
 ##### Laplace SLP Prework ######################################################
+@do_Close_Preparations
 def compensated_laplace_slp_preform(source, target, side, gradient=False):
     # check if the CSLP Matrix was already generated
-    if not hasattr(source, 'CSLP'):
-        source.CSLP = Complex_SLP_Kress_Split_Nystrom_Self_Form(source, side)
+    CSLP = Complex_SLP_Kress_Split_Nystrom_Self_Form(source, side)
     if side == 'e':
         # what gets done before cauchy
-        MAT1 = source.CSLP + source.sawlog[:,None]*(source.weights/(2.0*np.pi))
+        MAT1 = CSLP + source.sawlog[:,None]*(source.weights/(2.0*np.pi))
         MAT2 = source.inf_scale.dot(MAT1)[:,None]
         MAT = MAT1 - MAT2.T
         # what gets done after cauchy
         LA = np.log(np.abs(source.get_inside_point()-target.c))
         AFTER_MAT = -LA[:,None]*(source.weights/(2.0*np.pi))-MAT2.T
     else:
-        MAT = source.CSLP
+        MAT = CSLP
         AFTER_MAT = np.zeros([target.N, source.N]), np.zeros([target.N, source.N])
     if gradient:
         if side == 'e':
             LD = 1.0/(source.get_inside_point()-target.c)
             AFTER_DER_MAT = source.weights/(2.0*np.pi)*LD[:,None]
         else:
-            AFTER_DER_MAT = np.zeros([trg.M, src.N])
+            AFTER_DER_MAT = np.zeros([target.M, soure.N])
         ret = MAT, (AFTER_MAT, AFTER_DER_MAT)
     else:
         ret = MAT, AFTER_MAT
     return ret
 # only one version (no FMM version...)
+@do_Close_Preparations
 def compensated_laplace_slp_preapply(source, target, side, tau, gradient=False):
     # how to reliably control that this only gets done once if there
     # are multiple apply calls? I.e. to multiple targets?
     # can't just store it and depend on that as in the form
     # because it may be called with different taus
     # check to see if source has this computed, use it if it is!
-    if hasattr(source, 'CSLP'):
-        vb = source.CSLP.dot(tau)
+    attr = 'CSLP_' + side
+    if hasattr(source, attr):
+        CSLP = getattr(source, attr)
+        vb = CSLP.dot(tau)
     else:
         vb = Complex_SLP_Kress_Split_Nystrom_Self_Apply(source, side, tau)
     if side == 'e':
