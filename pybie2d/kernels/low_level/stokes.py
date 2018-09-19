@@ -91,7 +91,7 @@ def _SKAND(sx, sy, tx, ty, dipx, dipy, nx, ny, u, v):
             v[i] += (Gd01*dipx[j] + Gd11*dipy[j])
 
 @numba.njit(parallel=True)
-def _SKANB(sx, sy, tx, ty, fx, fy, u, v):
+def _SKANB(sx, sy, tx, ty, fx, fy, dipx, dipy, nx, ny, u, v):
     """
     Numba-jitted Stokes Kernel
     Case:
@@ -115,25 +115,32 @@ def _SKANB(sx, sy, tx, ty, fx, fy, u, v):
     Note that a 1.0/pi weight is applied to dipx, dipy in that interface
     """
     for i in numba.prange(tx.shape[0]):
+        temp = np.zeros(sx.shape[0])
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
             dy = ty[i] - sy[j]
             dxdx = dx*dx
             dxdy = dx*dy
             dydy = dy*dy
-            d2 = dxdx + dydy
-            id2 = 1.0/d2
-            logd = 0.5*np.log(d2)
+            temp[j] = dxdx + dydy
+            id2 = 1.0/temp[j]
+            G00 = dxdx*id2
+            G01 = dxdy*id2
+            G11 = dydy*id2
             d_dot_n = dx*nx[j] + dy*ny[j]
             d_dot_n_ir4 = d_dot_n*id2*id2
-            G00 = (-logd + dxdx*id2)
-            G01 = dxdy*id2
-            G11 = (-logd + dydy*id2)
             Gd00 = d_dot_n_ir4*dxdx
             Gd01 = d_dot_n_ir4*dxdy
             Gd11 = d_dot_n_ir4*dydy
-            u[i] += (G00*fx[j] + G01*fy[j] + Gd00*dipx[j] + Gd01*dipy[j])
-            v[i] += (G01*fx[j] + G11*fy[j] + Gd01*dipx[j] + Gd11*dipy[j])
+            u[i] += (G00*fx[j] + G01*fy[j])
+            v[i] += (G01*fx[j] + G11*fy[j])
+            u[i] += (Gd00*dipx[j] + Gd01*dipy[j])
+            v[i] += (Gd01*dipx[j] + Gd11*dipy[j])
+        for j in range(sx.shape[0]):
+            temp[j] = np.log(temp[j])
+        for j in range(sx.shape[0]):
+            u[i] -= 0.5*temp[j]*fx[j]
+            v[i] -= 0.5*temp[j]*fy[j]
 
 def Stokes_Kernel_Apply_numba(source, target, forces=None, dipstr=None,
                                                     dipvec=None, weights=None):
