@@ -12,8 +12,7 @@ from ... import have_fmm
 if have_fmm:
     from ... import FMM
 
-from ..low_level.stokes import Stokes_Kernel_Apply, Stokes_Kernel_Self_Apply
-from ..low_level.stokes import Stokes_Kernel_Form,  Stokes_Kernel_Self_Form
+from ..low_level.stokes import Stokes_Kernel_Apply, Stokes_Kernel_Form
 
 ################################################################################
 # Applies
@@ -51,27 +50,18 @@ def Stokes_Layer_Apply(source, target=None, forces=None, dipstr=None,
     forces = check_and_convert(forces, source)
     dipstr = check_and_convert(dipstr, source)
     dipvec = None if dipstr is None else source.get_stacked_normal(T=True)
-    if target is None or source is target:
-        backend = get_backend(source.N, source.N, backend)
-        out = Stokes_Kernel_Self_Apply(
-                    source  = source.get_stacked_boundary(T=True),
-                    forces  = forces,
-                    dipstr  = dipstr,
-                    dipvec  = dipvec,
-                    weights = source.weights,
-                    backend = backend,
-                )
-    else:
-        backend = get_backend(source.N, target.N, backend)
-        out = Stokes_Kernel_Apply(
-                    source  = source.get_stacked_boundary(T=True),
-                    target  = target.get_stacked_boundary(T=True),
-                    forces  = forces,
-                    dipstr  = dipstr,
-                    dipvec  = dipvec,
-                    weights = source.weights,
-                    backend = backend,
-                )
+    if target is None:
+        target = source
+    backend = get_backend(source.N, target.N, backend)
+    out = Stokes_Kernel_Apply(
+                source  = source.get_stacked_boundary(T=True),
+                target  = target.get_stacked_boundary(T=True),
+                forces  = forces,
+                dipstr  = dipstr,
+                dipvec  = dipvec,
+                weights = source.weights,
+                backend = backend,
+            )
     if out_type == 'flat':
         return out.reshape(2*target.N)
     else:
@@ -138,27 +128,18 @@ def Stokes_Layer_Form(source, target=None, ifforce=False, fweight=None,
         ignoring the i=j term in the sum
     """
     dipvec = None if ifdipole is None else source.get_stacked_normal(T=True)
-    if target is None or source is target:
-        return Stokes_Kernel_Self_Form(
-                source   = source.get_stacked_boundary(T=True),
-                ifforce  = ifforce,
-                fweight  = fweight,
-                ifdipole = ifdipole,
-                dpweight = dpweight,
-                dipvec   = dipvec,
-                weights  = source.weights,
-            )
-    else:
-        return Stokes_Kernel_Form(
-                source   = source.get_stacked_boundary(T=True),
-                target   = target.get_stacked_boundary(T=True),
-                ifforce  = ifforce,
-                fweight  = fweight,
-                ifdipole = ifdipole,
-                dpweight = dpweight,
-                dipvec   = dipvec,
-                weights  = source.weights,
-            )
+    if target is None:
+        target = source
+    return Stokes_Kernel_Form(
+            source   = source.get_stacked_boundary(T=True),
+            target   = target.get_stacked_boundary(T=True),
+            ifforce  = ifforce,
+            fweight  = fweight,
+            ifdipole = ifdipole,
+            dpweight = dpweight,
+            dipvec   = dipvec,
+            weights  = source.weights,
+        )
 
 def Stokes_Layer_Singular_Form(source, ifforce=False, fweight=None,
                                                 ifdipole=False, dpweight=None):

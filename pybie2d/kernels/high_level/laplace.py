@@ -41,7 +41,7 @@ def Laplace_Layer_Apply(source, target=None, charge=None, dipstr=None,
     """
     dipvec = None if dipstr is None else source.get_stacked_normal(T=True)
     if target is None:
-        source = target
+        target = source
     backend = get_backend(source.N, source.N, backend)
     return Laplace_Kernel_Apply(
                 source   = source.get_stacked_boundary(T=True),
