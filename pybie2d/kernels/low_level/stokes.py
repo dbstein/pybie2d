@@ -11,87 +11,7 @@ if have_fmm:
 # General Purpose Low Level Source --> Target Kernel Apply Functions
 
 @numba.njit(parallel=True)
-def _SKANC(sx, sy, tx, ty, fx, fy, u, v):
-    """
-    Numba-jitted Stokes Kernel
-    Case:
-        Incoming: force
-        Outgoing: potential
-    Inputs:
-        sx,  intent(in),  float(ns), x-coordinates of source
-        sy,  intent(in),  float(ns), y-coordinates of source
-        tx,  intent(in),  float(nt), x-coordinates of target
-        ty,  intent(in),  float(nt), y-coordinates of target
-        fx,  intent(in),  float(ns), x-component of force
-        fy,  intent(in),  float(ns), y-component of force
-        u,   intent(out), float(nt), x-component of velocity at targ locations
-        v,   intent(out), float(nt), y-component of velocity at targ locations
-    ns = number of source points; nt = number of target points
-    all inputs are required
-
-    This function should generally not be called direclty
-    Instead call through the "Stokes_Kernel_Apply_numba" interface
-    Note that a 0.25/pi weight is applied to fx, fy in that interface
-    """
-    for i in numba.prange(tx.shape[0]):
-        temp = np.zeros(sx.shape[0])
-        for j in range(sx.shape[0]):
-            dx = tx[i] - sx[j]
-            dy = ty[i] - sy[j]
-            temp[j] = dx**2 + dy**2
-            id2 = 1.0/temp[j]
-            G00 = dx*dx*id2
-            G01 = dx*dy*id2
-            G11 = dy*dy*id2
-            u[i] += (G00*fx[j] + G01*fy[j])
-            v[i] += (G01*fx[j] + G11*fy[j])
-        for j in range(sx.shape[0]):
-            temp[j] = np.log(temp[j])
-        for j in range(sx.shape[0]):
-            u[i] -= 0.5*temp[j]*fx[j]
-            v[i] -= 0.5*temp[j]*fy[j]
-
-@numba.njit(parallel=True)
-def _SKAND(sx, sy, tx, ty, dipx, dipy, nx, ny, u, v):
-    """
-    Numba-jitted Stokes Kernel
-    Case:
-        Incoming: dipole
-        Outgoing: potential
-    Inputs:
-        sx,   intent(in),  float(ns), x-coordinates of source
-        sy,   intent(in),  float(ns), y-coordinates of source
-        tx,   intent(in),  float(nt), x-coordinates of target
-        ty,   intent(in),  float(nt), y-coordinates of target
-        dipx, intent(in),  float(ns), x-component of dipole strength
-        dipy, intent(in),  float(ns), x-component of dipole strength
-        nx,   intent(in),  float(ns), dipole orientation vector (x-coord)
-        ny,   intent(in),  float(ns), dipole orientation vector (y-coord)
-        u,    intent(out), float(nt), x-component of velocity at targ locations
-        v,    intent(out), float(nt), y-component of velocity at targ locations
-    ns = number of source points; nt = number of target points
-    all inputs are required
-
-    This function should generally not be called direclty
-    Instead call through the "Stokes_Kernel_Apply_numba" interface
-    Note that a 1.0/pi weight is applied to dipx, dipy in that interface
-    """
-    for i in numba.prange(tx.shape[0]):
-        for j in range(sx.shape[0]):
-            dx = tx[i] - sx[j]
-            dy = ty[i] - sy[j]
-            d2 = dx**2 + dy**2
-            d4 = d2*d2
-            d_dot_n = dx*nx[j] + dy*ny[j]
-            d_dot_n_ir4 = d_dot_n/d4
-            Gd00 = d_dot_n_ir4*dx*dx
-            Gd01 = d_dot_n_ir4*dx*dy
-            Gd11 = d_dot_n_ir4*dy*dy
-            u[i] += (Gd00*dipx[j] + Gd01*dipy[j])
-            v[i] += (Gd01*dipx[j] + Gd11*dipy[j])
-
-@numba.njit(parallel=True)
-def _SKANB(sx, sy, tx, ty, fx, fy, dipx, dipy, nx, ny, u, v):
+def _SKANB(sx, sy, tx, ty, fx, fy, dipx, dipy, nx, ny, u, v, ifforce, ifdipole):
     """
     Numba-jitted Stokes Kernel
     Case:
@@ -124,23 +44,26 @@ def _SKANB(sx, sy, tx, ty, fx, fy, dipx, dipy, nx, ny, u, v):
             dydy = dy*dy
             temp[j] = dxdx + dydy
             id2 = 1.0/temp[j]
-            G00 = dxdx*id2
-            G01 = dxdy*id2
-            G11 = dydy*id2
-            d_dot_n = dx*nx[j] + dy*ny[j]
-            d_dot_n_ir4 = d_dot_n*id2*id2
-            Gd00 = d_dot_n_ir4*dxdx
-            Gd01 = d_dot_n_ir4*dxdy
-            Gd11 = d_dot_n_ir4*dydy
-            u[i] += (G00*fx[j] + G01*fy[j])
-            v[i] += (G01*fx[j] + G11*fy[j])
-            u[i] += (Gd00*dipx[j] + Gd01*dipy[j])
-            v[i] += (Gd01*dipx[j] + Gd11*dipy[j])
-        for j in range(sx.shape[0]):
-            temp[j] = np.log(temp[j])
-        for j in range(sx.shape[0]):
-            u[i] -= 0.5*temp[j]*fx[j]
-            v[i] -= 0.5*temp[j]*fy[j]
+            if ifforce:
+                G00 = dxdx*id2
+                G01 = dxdy*id2
+                G11 = dydy*id2
+                u[i] += (G00*fx[j] + G01*fy[j])
+                v[i] += (G01*fx[j] + G11*fy[j])
+            if ifdipole:
+                d_dot_n = dx*nx[j] + dy*ny[j]
+                d_dot_n_ir4 = d_dot_n*id2*id2
+                Gd00 = d_dot_n_ir4*dxdx
+                Gd01 = d_dot_n_ir4*dxdy
+                Gd11 = d_dot_n_ir4*dydy
+                u[i] += (Gd00*dipx[j] + Gd01*dipy[j])
+                v[i] += (Gd01*dipx[j] + Gd11*dipy[j])
+        if ifforce:
+            for j in range(sx.shape[0]):
+                temp[j] = np.log(temp[j])
+            for j in range(sx.shape[0]):
+                u[i] -= 0.5*temp[j]*fx[j]
+                v[i] -= 0.5*temp[j]*fy[j]
 
 def Stokes_Kernel_Apply_numba(source, target, forces=None, dipstr=None,
                                                     dipvec=None, weights=None):
@@ -164,26 +87,19 @@ def Stokes_Kernel_Apply_numba(source, target, forces=None, dipstr=None,
     sy = source[1]
     tx = target[0]
     ty = target[1]
-    code = 0
     velocity = np.zeros([2,target.shape[1]], dtype=float)
     u = velocity[0]
     v = velocity[1]
-    if forces is not None:
-        code += 1
-        fx = forces[0]*weighted_weights1
-        fy = forces[1]*weighted_weights1
-    if dipstr is not None:
-        code += 2
-        dipx = dipstr[0]*weighted_weights2
-        dipy = dipstr[1]*weighted_weights2
-        nx = dipvec[0]
-        ny = dipvec[1]
-    if code == 1:
-        _SKANC(sx, sy, tx, ty, fx, fy, u, v)
-    if code == 2:
-        _SKAND(sx, sy, tx, ty, dipx, dipy, nx, ny, u, v)
-    if code == 3:
-        _SKANB(sx, sy, tx, ty, fx, fy, dipx, dipy, nx, ny, u, v)
+    ifforces = forces is not None
+    ifdipole = dipstr is not None
+    zero_vec = np.zeros(source.shape[1], dtype=float)
+    fx = zero_vec if forces is None else forces[0]*weighted_weights1
+    fy = zero_vec if forces is None else forces[1]*weighted_weights1
+    dipx = zero_vec if dipstr is None else dipstr[0]*weighted_weights2
+    dipy = zero_vec if dipstr is None else dipstr[1]*weighted_weights2
+    nx = zero_vec if dipvec is None else dipvec[0]
+    ny = zero_vec if dipvec is None else dipvec[1]
+    _SKANB(sx, sy, tx, ty, fx, fy, dipx, dipy, nx, ny, u, v, ifforces, ifdipole)
     return velocity
 
 def Stokes_Kernel_Apply_FMM(source, target, forces=None, dipstr=None,
