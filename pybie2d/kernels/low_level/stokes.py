@@ -38,31 +38,31 @@ def _SKANB(sx, sy, tx, ty, fx, fy, dipx, dipy, nx, ny, u, v, ifforce, ifdipole):
     for i in numba.prange(tx.shape[0]):
         temp = np.zeros(sx.shape[0])
         for j in range(sx.shape[0]):
-            if not (doself and i == j):
-                dx = tx[i] - sx[j]
-                dy = ty[i] - sy[j]
-                dxdx = dx*dx
-                dxdy = dx*dy
-                dydy = dy*dy
-                temp[j] = dxdx + dydy
-                id2 = 1.0/temp[j]
-                if ifforce:
-                    G00 = dxdx*id2
-                    G01 = dxdy*id2
-                    G11 = dydy*id2
+            dx = tx[i] - sx[j]
+            dy = ty[i] - sy[j]
+            dxdx = dx*dx
+            dxdy = dx*dy
+            dydy = dy*dy
+            temp[j] = dxdx + dydy
+            id2 = 1.0/temp[j]
+            if ifforce:
+                G00 = dxdx*id2
+                G01 = dxdy*id2
+                G11 = dydy*id2
+                if not (doself and i == j):
                     u[i] += (G00*fx[j] + G01*fy[j])
                     v[i] += (G01*fx[j] + G11*fy[j])
-                if ifdipole:
-                    d_dot_n = dx*nx[j] + dy*ny[j]
-                    d_dot_n_ir4 = d_dot_n*id2*id2
-                    Gd00 = d_dot_n_ir4*dxdx
-                    Gd01 = d_dot_n_ir4*dxdy
-                    Gd11 = d_dot_n_ir4*dydy
+            if ifdipole:
+                d_dot_n = dx*nx[j] + dy*ny[j]
+                d_dot_n_ir4 = d_dot_n*id2*id2
+                Gd00 = d_dot_n_ir4*dxdx
+                Gd01 = d_dot_n_ir4*dxdy
+                Gd11 = d_dot_n_ir4*dydy
+                if not (doself and i == j):
                     u[i] += (Gd00*dipx[j] + Gd01*dipy[j])
                     v[i] += (Gd01*dipx[j] + Gd11*dipy[j])
         if ifforce:
             for j in range(sx.shape[0]):
-                # if not (doself and i == j):
                     temp[j] = np.log(temp[j])
             for j in range(sx.shape[0]):
                 if not (doself and i == j):
