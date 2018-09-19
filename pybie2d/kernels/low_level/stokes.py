@@ -34,17 +34,22 @@ def _SKANC(sx, sy, tx, ty, fx, fy, u, v):
     Note that a 0.25/pi weight is applied to fx, fy in that interface
     """
     for i in numba.prange(tx.shape[0]):
+        temp = np.zeros(sx.shape[0])
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
             dy = ty[i] - sy[j]
-            d2 = dx**2 + dy**2
-            id2 = 1.0/d2
-            logd = 0.5*np.log(d2)
-            G00 = (-logd + dx*dx*id2)
+            temp[j] = dx**2 + dy**2
+            id2 = 1.0/temp[j]
+            G00 = dx*dx*id2
             G01 = dx*dy*id2
-            G11 = (-logd + dy*dy*id2)
+            G11 = dy*dy*id2
             u[i] += (G00*fx[j] + G01*fy[j])
             v[i] += (G01*fx[j] + G11*fy[j])
+        for j in range(sx.shape[0]):
+            temp[j] = np.log(temp[j])
+        for j in range(sx.shape[0]):
+            u[i] -= 0.5*temp[j]*fx[j]
+            v[i] -= 0.5*temp[j]*fy[j]
 
 @numba.njit(parallel=True)
 def _SKAND(sx, sy, tx, ty, dipx, dipy, nx, ny, u, v):
