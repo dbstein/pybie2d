@@ -28,8 +28,8 @@ def _cauchy(s, t, dipstr, pot):
     doself = s is t
     for i in numba.prange(t.shape[0]):
         for j in range(s.shape[0]):
-            # if not (doself and i == j):
-            pot[i] += dipstr[j]/(t[i]-s[j])
+            if not (doself and i == j):
+                pot[i] += dipstr[j]/(t[i]-s[j])
             # if t[i] != s[j]: # this is ugly! (should be handled not here!)
             #     pot[i] += dipstr[j]/(t[i]-s[j])
             # else:
