@@ -62,7 +62,7 @@ def _SKANB(sx, sy, tx, ty, fx, fy, dipx, dipy, nx, ny, u, v, ifforce, ifdipole):
                     v[i] += (Gd01*dipx[j] + Gd11*dipy[j])
         if ifforce:
             for j in range(sx.shape[0]):
-                if not (doself and i == j):
+                # if not (doself and i == j):
                     temp[j] = np.log(temp[j])
             for j in range(sx.shape[0]):
                 if not (doself and i == j):
