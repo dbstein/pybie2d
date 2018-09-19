@@ -33,9 +33,6 @@ def _SKANC(sx, sy, tx, ty, fx, fy, u, v):
     Instead call through the "Stokes_Kernel_Apply_numba" interface
     Note that a 0.25/pi weight is applied to fx, fy in that interface
     """
-    for i in range(tx.shape[0]):
-        u[i] = 0.0
-        v[i] = 0.0
     for i in numba.prange(tx.shape[0]):
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
@@ -74,9 +71,6 @@ def _SKAND(sx, sy, tx, ty, dipx, dipy, nx, ny, u, v):
     Instead call through the "Stokes_Kernel_Apply_numba" interface
     Note that a 1.0/pi weight is applied to dipx, dipy in that interface
     """
-    for i in range(tx.shape[0]):
-        u[i] = 0.0
-        v[i] = 0.0
     for i in numba.prange(tx.shape[0]):
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
@@ -115,9 +109,6 @@ def _SKANB(sx, sy, tx, ty, fx, fy, u, v):
     Note that a 0.25/pi weight is applied to fx, fy in that interface
     Note that a 1.0/pi weight is applied to dipx, dipy in that interface
     """
-    for i in range(tx.shape[0]):
-        u[i] = 0.0
-        v[i] = 0.0
     for i in numba.prange(tx.shape[0]):
         for j in range(sx.shape[0]):
             dx = tx[i] - sx[j]
@@ -162,7 +153,7 @@ def Stokes_Kernel_Apply_numba(source, target, forces=None, dipstr=None,
     tx = target[0]
     ty = target[1]
     code = 0
-    velocity = np.empty([2,target.shape[1]], dtype=float)
+    velocity = np.zeros([2,target.shape[1]], dtype=float)
     u = velocity[0]
     v = velocity[1]
     if forces is not None:
