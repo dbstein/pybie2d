@@ -20,24 +20,25 @@ NG = 100
 
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle
-GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
+GSB = pybie2d.boundaries.global_smooth_boundary.global_smooth_boundary.Global_Smooth_Boundary
 Grid = pybie2d.grid.Grid
 PointSet = pybie2d.point_set.PointSet
 Laplace_Layer_Form = pybie2d.kernels.high_level.laplace.Laplace_Layer_Form
 Laplace_Layer_Singular_Form = pybie2d.kernels.high_level.laplace.Laplace_Layer_Singular_Form
 Laplace_Layer_Apply = pybie2d.kernels.high_level.laplace.Laplace_Layer_Apply
 Cauchy_Layer_Apply = pybie2d.kernels.high_level.cauchy.Cauchy_Layer_Apply
-Compensated_Laplace_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Full_Form
+Compensated_Laplace_Form = pybie2d.boundaries.global_smooth_boundary.laplace_close_quad.Compensated_Laplace_Form
 Find_Near_Points = pybie2d.misc.near_points.find_near_points
 Pairing = pybie2d.pairing.Pairing
 Close_Corrector = pybie2d.close.Close_Corrector
-Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Apply
+Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.laplace_close_quad.Compensated_Laplace_Apply
 
 ################################################################################
 # define problem
 
 # boundary
 boundary = GSB(c=squish(NB,r=2,b=0.3,rot=np.pi/4.0))
+boundary.add_module('Laplace_Close_Quad')
 # solution
 solution_func = lambda x, y: 2*x + y
 bc = solution_func(boundary.x, boundary.y)
@@ -105,8 +106,7 @@ close_distance = boundary.tolerance_to_distance(1.0e-12)
 close_pts = gridp.find_near_points(boundary, boundary.max_h*5.7)
 close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
 # generate close eval matrix
-close_eval = Compensated_Laplace_Apply(boundary, close_trg, 'i', tau, \
-				do_DLP=True, DLP_weight=None, do_SLP=False, SLP_weight=None)
+close_eval = Compensated_Laplace_Apply(boundary, close_trg, 'i', tau, do_DLP=True)
 # generate naive matrix
 naive_eval = Laplace_Layer_Apply(boundary, close_trg, dipstr=tau)
 # construct close correction matrix
@@ -123,8 +123,7 @@ err_plot(uph)
 if NG <= 1000:
 	uph = up.copy()
 	# generate close eval matrix
-	close_mat = Compensated_Laplace_Full_Form(boundary, close_trg, 'i', do_DLP=True, \
-	                DLP_weight=None, do_SLP=False, SLP_weight=None, gradient=False)
+	close_mat = Compensated_Laplace_Form(boundary, close_trg, 'i', do_DLP=True)
 	# generate naive matrix
 	naive_mat = Laplace_Layer_Form(boundary, close_trg, ifdipole=True)
 	# construct close correction matrix
@@ -196,7 +195,7 @@ tx = (px - nx*adj[:,None]).flatten()
 ty = (py - ny*adj[:,None]).flatten()
 
 approach_targ = PointSet(tx, ty)
-MAT = Compensated_Laplace_Full_Form(boundary, approach_targ, 'i', do_DLP=True).real
+MAT = Compensated_Laplace_Form(boundary, approach_targ, 'i', do_DLP=True).real
 sol = MAT.dot(tau)
 true = solution_func(tx, ty)
 err = np.abs(true-sol)
@@ -209,7 +208,7 @@ print('Error approaching boundary (apply) is: {:0.3e}'.format(err.max()))
 ################################################################################
 # check gradients
 
-close_mat, dxm, dym = Compensated_Laplace_Full_Form(boundary, close_trg, 'i',
+close_mat, dxm, dym = Compensated_Laplace_Form(boundary, close_trg, 'i',
 													do_DLP=True, gradient=True)
 
 uxt = 2.0*np.ones(close_trg.N)
@@ -235,7 +234,7 @@ print('Error in uy apply is: {:0.3e}'.format(err_uy.max()))
 
 print('Error in gradients as you approach boundary:')
 
-close_mat, dxm, dym = Compensated_Laplace_Full_Form(boundary, approach_targ, 'i',
+close_mat, dxm, dym = Compensated_Laplace_Form(boundary, approach_targ, 'i',
 													do_DLP=True, gradient=True)
 
 uxt = 2.0*np.ones(approach_targ.N)

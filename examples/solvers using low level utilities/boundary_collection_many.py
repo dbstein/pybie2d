@@ -23,7 +23,7 @@ NBS[-1] = 3000
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle
 star = pybie2d.misc.curve_descriptions.star
-GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
+GSB = pybie2d.boundaries.global_smooth_boundary.global_smooth_boundary.Global_Smooth_Boundary
 Grid = pybie2d.grid.Grid
 PointSet = pybie2d.point_set.PointSet
 Laplace_Layer_Apply = pybie2d.kernels.high_level.laplace.Laplace_Layer_Apply
@@ -35,7 +35,6 @@ Find_Near_Points = pybie2d.misc.near_points.find_near_points
 Pairing = pybie2d.pairing.Pairing
 CollectionPairing = pybie2d.pairing.CollectionPairing
 Close_Corrector = pybie2d.close.Close_Corrector
-Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Apply
 Boundary_Collection = pybie2d.boundaries.collection.BoundaryCollection
 LaplaceDirichletSolver = pybie2d.solvers.laplace_dirichlet.LaplaceDirichletSolver
 Evaluate_Tau = pybie2d.solvers.laplace_dirichlet.Evaluate_Tau

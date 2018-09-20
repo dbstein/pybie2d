@@ -58,7 +58,7 @@ class LaplaceDirichletSolver(object):
 			elif self.type == 'iterative':
 				backend = 'preformed'
 			else:
-				backend = 'full preformed'
+				backend = 'preformed'
 			self.pairings = np.empty([self.collection.n_boundaries, self.collection.n_boundaries], dtype=object)
 			self.codes = np.empty([self.collection.n_boundaries, self.collection.n_boundaries], dtype=object)
 			for i in range(self.collection.n_boundaries):

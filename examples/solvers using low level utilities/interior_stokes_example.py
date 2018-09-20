@@ -15,17 +15,17 @@ And to give you an idea what is going on under the hood in the
 	higher level routines
 """
 
-N = 200
+N = 100
 
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle
-GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
+GSB = pybie2d.boundaries.global_smooth_boundary.global_smooth_boundary.Global_Smooth_Boundary
 Grid = pybie2d.grid.Grid
 PointSet = pybie2d.point_set.PointSet
 Stokes_Layer_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Form
 Stokes_Layer_Singular_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Singular_Form
 Stokes_Layer_Apply = pybie2d.kernels.high_level.stokes.Stokes_Layer_Apply
-Compensated_Stokes_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Stokes_Full_Form
+Compensated_Stokes_Form = pybie2d.boundaries.global_smooth_boundary.stokes_close_quad.Compensated_Stokes_Form
 Pairing = pybie2d.pairing.Pairing
 
 ################################################################################
@@ -33,6 +33,7 @@ Pairing = pybie2d.pairing.Pairing
 
 # boundary
 boundary = GSB(c=squish(N,r=2,b=0.3,rot=np.pi/4.0))
+boundary.add_module('Stokes_Close_Quad')
 # solution
 solution_func_u = lambda x, y: 2*y
 solution_func_v = lambda x, y: 0.5*x
@@ -111,7 +112,7 @@ close_distance = boundary.tolerance_to_distance(1e-12)
 close_pts = gridp.find_near_points(boundary, close_distance)
 close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
 # generate close eval matrix
-close_mat = Compensated_Stokes_Full_Form(boundary, close_trg, 'i', do_DLP=True)
+close_mat = Compensated_Stokes_Form(boundary, close_trg, 'i', do_DLP=True)
 # generate naive matrix
 naive_mat = Stokes_Layer_Form(boundary, close_trg, ifdipole=True)
 # construct close correction matrix
@@ -176,7 +177,7 @@ err_plot(vp, solution_func_v)
 
 Up1 = Up.copy()
 # to show how much easier the Pairing utility makes things
-code1 = pair.Setup_Close_Corrector(do_DLP=True, kernel='stokes', backend='full preformed')
+code1 = pair.Setup_Close_Corrector(do_DLP=True, kernel='stokes', backend='preformed')
 pair.Close_Correction(Up1.ravel(), tau, code1)
 
 up = Up1[0]
@@ -195,7 +196,7 @@ tx = (px - nx*adj[:,None]).flatten()
 ty = (py - ny*adj[:,None]).flatten()
 
 approach_targ = PointSet(tx, ty)
-mat = Compensated_Stokes_Full_Form(boundary, approach_targ, 'i', do_DLP=True).real
+mat = Compensated_Stokes_Form(boundary, approach_targ, 'i', do_DLP=True).real
 sol = mat.dot(tau)
 sol_u = sol[:approach_targ.N]
 sol_v = sol[approach_targ.N:]

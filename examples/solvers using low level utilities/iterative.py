@@ -20,7 +20,7 @@ NB2 = 600
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle
 star = pybie2d.misc.curve_descriptions.star
-GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
+GSB = pybie2d.boundaries.global_smooth_boundary.global_smooth_boundary.Global_Smooth_Boundary
 Grid = pybie2d.grid.Grid
 PointSet = pybie2d.point_set.PointSet
 Laplace_Layer_Apply = pybie2d.kernels.high_level.laplace.Laplace_Layer_Apply
@@ -29,7 +29,6 @@ Cauchy_Layer_Apply = pybie2d.kernels.high_level.cauchy.Cauchy_Layer_Apply
 Find_Near_Points = pybie2d.misc.near_points.find_near_points
 Pairing = pybie2d.pairing.Pairing
 Close_Corrector = pybie2d.close.Close_Corrector
-Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Apply
 
 boundary1 = GSB(c=squish(NB1,r=2,b=0.3,rot=np.pi/4.0))
 boundary2 = GSB(c=star(NB2,x=0.75,y=0.75,r=0.3,a=0.4,f=7,rot=np.pi/3.0))

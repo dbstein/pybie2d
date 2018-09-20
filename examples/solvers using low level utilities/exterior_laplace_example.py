@@ -21,15 +21,15 @@ NB = 200  # discretization of boundary
 
 # extract some functions for easy calling
 star = pybie2d.misc.curve_descriptions.star
-GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
+GSB = pybie2d.boundaries.global_smooth_boundary.global_smooth_boundary.Global_Smooth_Boundary
 PointSet = pybie2d.point_set.PointSet
 Grid = pybie2d.grid.Grid
 Laplace_Layer_Form = pybie2d.kernels.high_level.laplace.Laplace_Layer_Form
 Laplace_Layer_Singular_Form = pybie2d.kernels.high_level.laplace.Laplace_Layer_Singular_Form
 Laplace_Layer_Apply = pybie2d.kernels.high_level.laplace.Laplace_Layer_Apply
 Cauchy_Layer_Apply = pybie2d.kernels.high_level.cauchy.Cauchy_Layer_Apply
-Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Apply
-Compensated_Laplace_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Full_Form
+Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.laplace_close_quad.Compensated_Laplace_Apply
+Compensated_Laplace_Form = pybie2d.boundaries.global_smooth_boundary.laplace_close_quad.Compensated_Laplace_Form
 Pairing = pybie2d.pairing.Pairing
 
 ################################################################################
@@ -37,6 +37,8 @@ Pairing = pybie2d.pairing.Pairing
 
 # boundary
 boundary = GSB(c=star(NB,x=0,y=0,r=1.0,a=0.4,f=3,rot=np.pi/3.0))
+boundary.add_module('Laplace_SLP_Self_Kress')
+boundary.add_module('Laplace_Close_Quad')
 
 # point at which to have a source
 pt_source_location = 0.0 + 0.0j
@@ -136,7 +138,7 @@ close_distance = boundary.tolerance_to_distance(1e-12)
 close_pts = gridp.find_near_points(boundary, close_distance).ravel()
 close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
 # generate close eval matrix
-close_mat = Compensated_Laplace_Full_Form(boundary, close_trg, 'e',
+close_mat = Compensated_Laplace_Form(boundary, close_trg, 'e',
 								do_DLP=True, do_SLP=True, gradient=False)
 # generate naive matrix
 naive_mat = Laplace_Layer_Form(boundary, close_trg, ifdipole=True, ifcharge=True)
@@ -195,26 +197,16 @@ gridp = Grid([-2,2], N, [-2,2], N, mask=phys, periodic=True)
 up = Laplace_Layer_Apply(boundary, gridp, charge=tau, dipstr=tau)
 
 ################################################################################
-# correct with pair routines (full preformed)
+# correct with pair routines (preformed)
 
 uph = up.copy()
 # to show how much easier the Pairing utility makes things
 pair = Pairing(boundary, gridp, 'e', 1e-15)
 code1 = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, \
-													backend='full preformed')
+													backend='preformed')
 pair.Close_Correction(uph, tau, code1)
 
 err_plot(uph)
-
-################################################################################
-# correct with pair routines (preformed)
-
-# uph = up.copy()
-# # to show how much easier the Pairing utility makes things
-# code2 = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='preformed')
-# pair.Close_Correction(uph, tau, code2)
-
-# err_plot(uph)
 
 ################################################################################
 # correct with pair routines (on the fly)
@@ -236,7 +228,7 @@ tx = (px + nx*adj[:,None]).flatten()
 ty = (py + ny*adj[:,None]).flatten()
 
 approach_targ = PointSet(tx, ty)
-mat = Compensated_Laplace_Full_Form(boundary, approach_targ, 'e', do_DLP=True, do_SLP=True)
+mat = Compensated_Laplace_Form(boundary, approach_targ, 'e', do_DLP=True, do_SLP=True)
 # sol = Compensated_Laplace_Apply(boundary, approach_targ, 'e', tau, do_DLP=True, do_SLP=True)
 sol = mat.dot(tau)
 true = solution_func(tx, ty)
@@ -252,7 +244,7 @@ print('Error approaching boundary (apply) is: {:0.3e}'.format(err.max()))
 ################################################################################
 # check gradients
 
-close_mat, dxm, dym = Compensated_Laplace_Full_Form(boundary, close_trg, 'e',
+close_mat, dxm, dym = Compensated_Laplace_Form(boundary, close_trg, 'e',
 										do_DLP=True, do_SLP=True, gradient=True)
 
 uxt = close_trg.x/(close_trg.x**2 + close_trg.y**2)
@@ -278,7 +270,7 @@ print('Error in uy apply is: {:0.3e}'.format(err_uy.max()))
 
 print('Error in gradients as you approach boundary:')
 
-close_mat, dxm, dym = Compensated_Laplace_Full_Form(boundary, approach_targ, 'e',
+close_mat, dxm, dym = Compensated_Laplace_Form(boundary, approach_targ, 'e',
 										do_DLP=True, do_SLP=True, gradient=True)
 
 uxt = approach_targ.x/(approach_targ.x**2 + approach_targ.y**2)

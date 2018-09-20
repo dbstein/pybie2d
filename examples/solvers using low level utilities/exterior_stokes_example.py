@@ -19,15 +19,14 @@ N = 250
 
 # extract some functions for easy calling
 star = pybie2d.misc.curve_descriptions.star
-GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
+GSB = pybie2d.boundaries.global_smooth_boundary.global_smooth_boundary.Global_Smooth_Boundary
 Grid = pybie2d.grid.Grid
 PointSet = pybie2d.point_set.PointSet
 Stokes_Layer_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Form
 Stokes_Layer_Singular_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Singular_Form
 Stokes_Layer_Apply = pybie2d.kernels.high_level.stokes.Stokes_Layer_Apply
-Compensated_Stokes_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Stokes_Full_Form
-Compensated_Stokes_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Stokes_Apply
-Compensated_Laplace_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Full_Form
+Compensated_Stokes_Form = pybie2d.boundaries.global_smooth_boundary.stokes_close_quad.Compensated_Stokes_Form
+Compensated_Stokes_Apply = pybie2d.boundaries.global_smooth_boundary.stokes_close_quad.Compensated_Stokes_Apply
 Pairing = pybie2d.pairing.Pairing
 
 ################################################################################
@@ -35,6 +34,8 @@ Pairing = pybie2d.pairing.Pairing
 
 # boundary
 boundary = GSB(c=star(N,x=0,y=0,r=1.0,a=0.3,f=4,rot=np.pi/3.0))
+boundary.add_module('Stokes_SLP_Self_Kress')
+boundary.add_module('Stokes_Close_Quad')
 
 # solution that is the evaluation of a point force of (1,1) at (0,0)
 def solution_function(x, y):
@@ -118,7 +119,7 @@ close_distance = boundary.tolerance_to_distance(1.0e-16)
 close_pts = gridp.find_near_points(boundary, close_distance)
 close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
 # generate close eval matrix
-close_mat = Compensated_Stokes_Full_Form(boundary, close_trg, 'e', do_DLP=True, do_SLP=True)
+close_mat = Compensated_Stokes_Form(boundary, close_trg, 'e', do_DLP=True, do_SLP=True)
 # generate naive matrix
 naive_mat = Stokes_Layer_Form(boundary, close_trg, ifdipole=True, ifforce=True)
 # construct close correction matrix
@@ -134,11 +135,41 @@ err_plot(uph, solution_func_u)
 err_plot(vph, solution_func_v)
 
 ################################################################################
-# correct with pair routines (on the fly)
+# correct with pair routines (preformed)
 
 Up1 = Up.copy()
 # to show how much easier the Pairing utility makes things
 pair = Pairing(boundary, gridp, 'e', 1e-12)
+code = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, kernel='stokes', backend='preformed')
+pair.Close_Correction(Up1.ravel(), tau, code)
+
+err_plot(Up1[0], solution_func_u)
+err_plot(Up1[1], solution_func_v)
+
+################################################################################
+# correct with close evaluation (on the fly)
+
+uph = up.copy()
+vph = vp.copy()
+# generate close eval matrix
+close_eval = Compensated_Stokes_Apply(boundary, close_trg, 'e', tau, do_DLP=True, do_SLP=True)
+# generate naive matrix
+naive_eval = Stokes_Layer_Apply(boundary, close_trg, forces=tau, dipstr=tau)
+# construct close correction matrix
+correction = close_eval - naive_eval
+
+# find the correction and fix the naive solution
+uph[close_pts] += correction[:close_trg.N]
+vph[close_pts] += correction[close_trg.N:]
+
+err_plot(uph, solution_func_u)
+err_plot(vph, solution_func_v)
+
+################################################################################
+# correct with pair routines (on the fly)
+
+Up1 = Up.copy()
+# to show how much easier the Pairing utility makes things
 code = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, kernel='stokes')
 pair.Close_Correction(Up1.ravel(), tau, code)
 

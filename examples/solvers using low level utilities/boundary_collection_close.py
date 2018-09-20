@@ -22,7 +22,7 @@ NB3 = 800
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle
 star = pybie2d.misc.curve_descriptions.star
-GSB = pybie2d.boundaries.global_smooth_boundary.Global_Smooth_Boundary
+GSB = pybie2d.boundaries.global_smooth_boundary.global_smooth_boundary.Global_Smooth_Boundary
 Grid = pybie2d.grid.Grid
 PointSet = pybie2d.point_set.PointSet
 Laplace_Layer_Apply = pybie2d.kernels.high_level.laplace.Laplace_Layer_Apply
@@ -34,11 +34,11 @@ Find_Near_Points = pybie2d.misc.near_points.find_near_points
 Pairing = pybie2d.pairing.Pairing
 CollectionPairing = pybie2d.pairing.CollectionPairing
 Close_Corrector = pybie2d.close.Close_Corrector
-Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Apply
+Compensated_Laplace_Apply = pybie2d.boundaries.global_smooth_boundary.laplace_close_quad.Compensated_Laplace_Apply
 Boundary_Collection = pybie2d.boundaries.collection.BoundaryCollection
 LaplaceDirichletSolver = pybie2d.solvers.laplace_dirichlet.LaplaceDirichletSolver
 Evaluate_Tau = pybie2d.solvers.laplace_dirichlet.Evaluate_Tau
-Compensated_Laplace_Full_Form = pybie2d.boundaries.global_smooth_boundary.Compensated_Laplace_Full_Form
+Compensated_Laplace_Form = pybie2d.boundaries.global_smooth_boundary.laplace_close_quad.Compensated_Laplace_Form
 
 boundary1 = GSB(c=squish(NB1,r=2,b=0.3,rot=np.pi/4.0))
 star_center = (0.3142, 0.75)
@@ -182,17 +182,17 @@ OP[NB1    :NB1+NB2, NB1+NB2:       ] = Laplace_Layer_Form(boundary3, boundary2, 
 OP[NB1+NB2:       , NB1+NB2:       ] = Laplace_Layer_Singular_Form(boundary3, ifdipole=True, ifcharge=True)
 # fully form close corrections
 pair12 = Pairing(boundary1, boundary2, 'i', 1e-12)
-code12 = pair12.Setup_Close_Corrector(do_DLP=True, backend='full preformed')
+code12 = pair12.Setup_Close_Corrector(do_DLP=True, backend='preformed')
 pair13 = Pairing(boundary1, boundary3, 'i', 1e-12)
-code13 = pair13.Setup_Close_Corrector(do_DLP=True, backend='full preformed')
+code13 = pair13.Setup_Close_Corrector(do_DLP=True, backend='preformed')
 pair21 = Pairing(boundary2, boundary1, 'e', 1e-12)
-code21 = pair21.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='full preformed')
+code21 = pair21.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='preformed')
 pair23 = Pairing(boundary2, boundary3, 'e', 1e-12)
-code23 = pair23.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='full preformed')
+code23 = pair23.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='preformed')
 pair31 = Pairing(boundary3, boundary1, 'e', 1e-12)
-code31 = pair31.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='full preformed')
+code31 = pair31.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='preformed')
 pair32 = Pairing(boundary3, boundary2, 'e', 1e-12)
-code32 = pair32.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='full preformed')
+code32 = pair32.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='preformed')
 # insert into operator
 OP[NB1    :NB1+NB2,        :NB1    ][pair12.close_points, :] += pair12.close_correctors[code12].preparations['correction_mat']
 OP[NB1+NB2:       ,        :NB1    ][pair13.close_points, :] += pair13.close_correctors[code13].preparations['correction_mat']
@@ -264,11 +264,11 @@ tauh = tau[boundary1.N+boundary2.N:]
 pair3.Close_Correction(uu, tauh, code3)
 
 # correct ux up close
-close_mat1a, dxm1a, dym1a = Compensated_Laplace_Full_Form(boundary1, pair1.close_targ, 'i', do_DLP=True, gradient=True)
+close_mat1a, dxm1a, dym1a = Compensated_Laplace_Form(boundary1, pair1.close_targ, 'i', do_DLP=True, gradient=True)
 close_mat1b, dxm1b, dym1b = Laplace_Layer_Form(boundary1, pair1.close_targ, ifdipole=True, gradient=True)
-close_mat2a, dxm2a, dym2a = Compensated_Laplace_Full_Form(boundary2, pair2.close_targ, 'e', do_DLP=True, do_SLP=True, gradient=True)
+close_mat2a, dxm2a, dym2a = Compensated_Laplace_Form(boundary2, pair2.close_targ, 'e', do_DLP=True, do_SLP=True, gradient=True)
 close_mat2b, dxm2b, dym2b = Laplace_Layer_Form(boundary2, pair2.close_targ, ifdipole=True, ifcharge=True, gradient=True)
-close_mat3a, dxm3a, dym3a = Compensated_Laplace_Full_Form(boundary3, pair3.close_targ, 'e', do_DLP=True, do_SLP=True, gradient=True)
+close_mat3a, dxm3a, dym3a = Compensated_Laplace_Form(boundary3, pair3.close_targ, 'e', do_DLP=True, do_SLP=True, gradient=True)
 close_mat3b, dxm3b, dym3b = Laplace_Layer_Form(boundary3, pair3.close_targ, ifdipole=True, ifcharge=True, gradient=True)
 
 tauh = tau[:boundary1.N]
