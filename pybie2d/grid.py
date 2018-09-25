@@ -13,27 +13,40 @@ class Grid(PointSet):
     Instantiation: see documentation to self.__init__()
     Methods:
     """
-    def __init__(   self, x_bounds, Nx, y_bounds, Ny, mask=None, periodic=True):
+    def __init__(   self, x_bounds, Nx, y_bounds, Ny, mask=None, x_endpoints=[True,True], y_endpoints=[True,True]):
         """
         Initialize a Grid.
 
-        x_bounds (required): tuple(float), (x_lower, x_upper)
-        Nx       (required): int,          number of points in x grid
-        y_bounds (required): tuple(float), (y_lower, y_upper)
-        Ny       (required): int,          number of points in y grid
-        mask     (optional): bool(Nx, Ny), mask giving points to use/not use
+        x_bounds  (required): tuple(float), (x_lower, x_upper)
+        Nx        (required): int,          number of points in x grid
+        y_bounds  (required): tuple(float), (y_lower, y_upper)
+        Ny        (required): int,          number of points in y grid
+        mask      (optional): bool(Nx, Ny), mask giving points to use/not use
+        x_endpoints (optional): list(bool), whether to include:
+                                                left endpoint, right endpoint
+        y_endpoints (optional): list(bool), see x_endpoints
         """
         self.x_bounds = x_bounds
         self.y_bounds = y_bounds
         self.Nx = Nx
         self.Ny = Ny
         self.mask = mask
-        self.periodic = periodic
-        self.endpoint = not self.periodic
+        self.x_endpoints = x_endpoints
+        self.y_endpoints = y_endpoints
+        self.Nx_adjust = self.Nx + (2-np.sum(self.x_endpoints))
+        self.Ny_adjust = self.Ny + (2-np.sum(self.y_endpoints))
         self.xv, self.xh = np.linspace(self.x_bounds[0], self.x_bounds[1],
-                            self.Nx, retstep=True, endpoint=self.endpoint)
+                            self.Nx_adjust, retstep=True, endpoint=True)
         self.yv, self.yh = np.linspace(self.x_bounds[0], self.x_bounds[1],
-                            self.Nx, retstep=True, endpoint=self.endpoint)
+                            self.Ny_adjust, retstep=True, endpoint=True)
+        if not self.x_endpoints[0]:
+            self.xv = self.xv[1:]
+        if not self.x_endpoints[1]:
+            self.xv = self.xv[:-1]
+        if not self.y_endpoints[0]:
+            self.yv = self.yv[1:]
+        if not self.y_endpoints[1]:
+            self.yv = self.yv[:-1]
         self.xg, self.yg = np.meshgrid(self.xv, self.yv, indexing='ij')
         if mask is None:
             self.x = self.xg.ravel()

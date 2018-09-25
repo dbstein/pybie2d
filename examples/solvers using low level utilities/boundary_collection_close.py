@@ -109,12 +109,12 @@ tau = solver.solve(bc, disp=True, restart=100, tol=1e-14)
 
 full_grid = Grid([-2,2], N, [-2,2], N, periodic=True)
 print('Computing interior/exteriors')
-phys1, ext1 = boundary1.find_interior_points(full_grid)
-phys2, ext2 = boundary2.find_interior_points(full_grid)
-phys3, ext3 = boundary3.find_interior_points(full_grid)
-exter = np.logical_and(ext2, ext3)
-phys = full_grid.reshape(np.logical_and(phys1, exter))
-ext = np.logical_not(phys)
+# phys1, ext1 = boundary1.find_interior_points(full_grid)
+# phys2, ext2 = boundary2.find_interior_points(full_grid)
+# phys3, ext3 = boundary3.find_interior_points(full_grid)
+# exter = np.logical_and(ext2, ext3)
+# phys = full_grid.reshape(np.logical_and(phys1, exter))
+# ext = np.logical_not(phys)
 
 # find physical region the easy way
 # st = time.time()

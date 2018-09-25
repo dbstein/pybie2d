@@ -47,18 +47,37 @@ class Laplace_Close_Quad(object):
         return Compensated_Laplace_Apply(self.boundary, target, side, tau, do_DLP,
             do_SLP, gradient, main_type, gradient_type, backend, forstokes)
 
-    def Get_Close_Correction_Function(self, target, side, do_DLP, do_SLP, backend):
-        """
-        Given target, kernel, and type ('preformed', 'fly', 'numba', or 'fmm'),
+    def Get_Close_Corrector(self, target, side, do_DLP, do_SLP, backend):
+        return Laplace_Close_Corrector(self.boundary, target, side, do_DLP, do_SLP, backend)
 
-        Returns a dictionary 'preparation'
-        And a function that takes as parameters tau, preparation that
-        is repsonsible for the close correction
-
-        Note that this does not check if target points need close evaluation!
-        """
-        return Get_Laplace_Close_Correction_Function(self.boundary, target, side,
-                                                        do_DLP, do_SLP, backend)
+class Laplace_Close_Corrector(object):
+    def __init__(self, source, target, side, do_DLP, do_SLP, backend):
+        self.source = source
+        self.target = target
+        self.side = side
+        self.do_DLP = do_DLP
+        self.do_SLP = do_SLP
+        self.backend = backend
+        self.preformed = self.backend == 'preformed'
+        self.prepare = self._prepare_formed if self.preformed else self._prepare_apply
+        self.call_func = self._call_formed if self.preformed else self._call_apply
+        self.prepare()
+    def __call__(self, *args, **kwargs):
+        self.call_func(*args, **kwargs)
+    def _prepare_formed(self):
+        close_mat = Compensated_Laplace_Form(self.source, self.target, self.side, self.do_DLP, self.do_SLP)
+        naive_mat = Laplace_Layer_Form(self.source, self.target, ifcharge=self.do_SLP, ifdipole=self.do_DLP)
+        self.correction_mat = close_mat.real - naive_mat
+    def _prepare_apply(self):
+        pass
+    def _call_formed(self, u, tau, close_pts):
+        u[close_pts] += self.correction_mat.dot(tau)
+    def _call_apply(self, u, tau, close_pts):
+        v1 = Compensated_Laplace_Apply(self.source, self.target, self.side, tau, do_DLP=self.do_DLP, do_SLP=self.do_SLP, backend=self.backend)
+        ch = tau if self.do_SLP else None
+        ds = tau if self.do_DLP else None
+        v2 = Laplace_Layer_Apply(self.source, self.target, charge=ch, dipstr=ds, backend=self.backend)
+        u[close_pts] += (v1.real - v2)
 
 def Compensated_Laplace_Form(source, target, side, do_DLP=False,
         do_SLP=False, gradient=False, main_type='real', gradient_type='real', forstokes=False):
@@ -206,53 +225,6 @@ def compensated_laplace_slp_preform(source, target, side, gradient=False):
     else:
         ret = MAT, AFTER_MAT
     return ret
-
-def Get_Laplace_Close_Correction_Function(source, target, side, do_DLP, do_SLP, backend):
-    if backend == 'preformed':
-        close_mat = Compensated_Laplace_Form(source, target, side, do_DLP, do_SLP)
-        naive_mat = Laplace_Layer_Form(source, target, ifcharge=do_SLP,
-                    chweight=1.0, ifdipole=do_DLP, dpweight=1.0)
-        correction_mat = close_mat.real - naive_mat
-        preparation = {
-            'do_DLP'         : do_DLP,
-            'do_SLP'         : do_SLP,
-            'correction_mat' : correction_mat,
-        }
-        return preparation, _Laplace_Close_Correction_Function_Preformed
-    else:
-        preparation = {
-            'source'       : source,
-            'target'       : target,
-            'side'         : side,
-            'do_DLP'       : do_DLP,
-            'do_SLP'       : do_SLP,
-            'backend'      : backend,
-        }
-        return preparation, _Laplace_Close_Correction_Function_Fly
-
-def _Laplace_Close_Correction_Function_Preformed(tau, preparation):
-    return preparation['correction_mat'].dot(tau)
-
-def _Laplace_Close_Correction_Function_Fly(tau, preparation):
-    v1 = Compensated_Laplace_Apply(
-            source     = preparation['source'],
-            target     = preparation['target'],
-            side       = preparation['side'],
-            tau        = tau,
-            do_DLP     = preparation['do_DLP'], 
-            do_SLP     = preparation['do_SLP'], 
-            backend    = preparation['backend']
-        )
-    ch = tau*int(preparation['do_SLP'])
-    ds = tau*int(preparation['do_DLP'])
-    v2 = Laplace_Layer_Apply(
-            source     = preparation['source'],
-            target     = preparation['target'],
-            charge     = ch,
-            dipstr     = ds,
-            backend    = preparation['backend']
-        )
-    return v1.real - v2
 
 def Compensated_Laplace_Apply(source, target, side, tau, do_DLP=False,
         do_SLP=False, gradient=False, main_type='real', gradient_type='real', backend='fly', forstokes=False):

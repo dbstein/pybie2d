@@ -113,8 +113,11 @@ class Global_Smooth_Boundary(Boundary):
     # end generate_resampled_boundary definition
 
     #########################
-    #### Public Methods ####
+    #### Public Methods #####
     #########################
+
+    ##### These provide interfaces so that high level funcitons
+    ##### Can easily extract the functions that they need
 
     # self quadrature (apply) for Laplace SLP
     def Laplace_SLP_Self_Apply(self, tau, backend='fly'):
@@ -147,28 +150,15 @@ class Global_Smooth_Boundary(Boundary):
         """
         return -np.log(tol)*self.max_h/4.5
 
-    def Get_Close_Correction_Function(self, target, side, do_DLP, DLP_weight,
-                                        do_SLP, SLP_weight, kernel, backend):
-        """
-        Given target, kernel, and type ('preformed', 'fly', 'numba', or 'fmm'),
-
-        Returns a dictionary 'preparation'
-        And a function that takes as parameters tau, preparation that
-        is repsonsible for the close correction
-
-        Note that this does not check if target points need close evaluation!
-        """
-        if kernel is 'laplace':
+    def Get_Close_Corrector(self, target, side, do_DLP, do_SLP, backend, kernel):
+        if kernel == 'laplace':
             self.add_module('Laplace_Close_Quad')
-            return self.Laplace_Close_Quad.Get_Close_Correction_Function(
-                                        target, side, do_DLP, do_SLP, backend)
-        if kernel is 'stokes':
+            return self.Laplace_Close_Quad.Get_Close_Corrector(target, side, do_DLP, do_SLP, backend)
+        elif kernel == 'stokes':
             self.add_module('Stokes_Close_Quad')
-            return self.Stokes_Close_Quad.Get_Close_Correction_Function(
-                                        target, side, do_DLP, do_SLP, backend)
+            return self.Stokes_Close_Quad.Get_Close_Corrector(target, side, do_DLP, do_SLP, backend)
         else:
-            raise Exception('Close evaluation for the selected kernel has not \
-                                                        yet been implemented.')
+            raise Exception("Specified kernel: '" + kernel + "' not recognized.")
 
     #########################
     #### Private Methods ####
