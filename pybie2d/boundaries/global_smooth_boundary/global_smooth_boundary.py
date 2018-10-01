@@ -10,6 +10,10 @@ from .stokes_slp_self_kress import Stokes_SLP_Self_Kress
 from .laplace_cslp_self_kress import Laplace_CSLP_Self_Kress
 from .laplace_close_quad import Laplace_Close_Quad
 from .stokes_close_quad import Stokes_Close_Quad
+from .modified_helmholtz_dlp_self import Modified_Helmholtz_DLP_Self
+from .modified_helmholtz_slp_self import Modified_Helmholtz_SLP_Self
+from .modified_helmholtz_close_quad import Modified_Helmholtz_Close_Quad
+from .stokes_slp_self_traction import Stokes_SLP_Self_Traction
 
 class Global_Smooth_Boundary(Boundary):
     """
@@ -70,6 +74,10 @@ class Global_Smooth_Boundary(Boundary):
                                     'Laplace_CSLP_Self_Kress',
                                     'Laplace_Close_Quad',
                                     'Stokes_Close_Quad',
+                                    'Modified_Helmholtz_DLP_Self',
+                                    'Modified_Helmholtz_SLP_Self',
+                                    'Modified_Helmholtz_Close_Quad',
+                                    'Stokes_SLP_Self_Traction',
                                 ]
     # end __init__ function definition
 
@@ -120,28 +128,34 @@ class Global_Smooth_Boundary(Boundary):
     ##### Can easily extract the functions that they need
 
     # self quadrature (apply) for Laplace SLP
-    def Laplace_SLP_Self_Apply(self, tau, backend='fly'):
+    def Laplace_SLP_Self_Apply(self, *args, **kwargs):
         self.add_module('Laplace_SLP_Self_Kress')
-        return self.Laplace_SLP_Self_Kress.Apply(tau, backend)
-    # end Laplace_SLP_Self_Apply function definition
+        return self.Laplace_SLP_Self_Kress.Apply(*args, **kwargs)
 
     # self quadrature (form) for Laplace SLP
-    def Laplace_SLP_Self_Form(self):
+    def Laplace_SLP_Self_Form(self, *args, **kwargs):
         self.add_module('Laplace_SLP_Self_Kress')
-        return self.Laplace_SLP_Self_Kress.Form()
-    # end Laplace_SLP_Self_Apply function definition
+        return self.Laplace_SLP_Self_Kress.Form(*args, **kwargs)
 
     # self quadrature (apply) for Stokes SLP
-    def Stokes_SLP_Self_Apply(self, tau, backend='fly'):
+    def Stokes_SLP_Self_Apply(self, *args, **kwargs):
         self.add_module('Stokes_SLP_Self_Kress')
-        return self.Stokes_SLP_Self_Kress.Apply(tau, backend)
-    # end Laplace_SLP_Self_Apply function definition
+        return self.Stokes_SLP_Self_Kress.Apply(*args, **kwargs)
 
-    # self quadrature (form) for Laplace SLP
-    def Stokes_SLP_Self_Form(self):
+    # self quadrature (form) for Stokes SLP
+    def Stokes_SLP_Self_Form(self, *args, **kwargs):
         self.add_module('Stokes_SLP_Self_Kress')
-        return self.Stokes_SLP_Self_Kress.Form()
-    # end Laplace_SLP_Self_Apply function definition
+        return self.Stokes_SLP_Self_Kress.Form(*args, **kwargs)
+
+    # self quadrature (form) for Modified Helmholtz DLP
+    def Modified_Helmholtz_DLP_Self_Form(self, *args, **kwargs):
+        self.add_module('Modified_Helmholtz_DLP_Self')
+        return self.Modified_Helmholtz_DLP_Self.Form(*args, **kwargs)
+
+    # self quadrature (form) for Modified Helmholtz SLP
+    def Modified_Helmholtz_SLP_Self_Form(self, *args, **kwargs):
+        self.add_module('Modified_Helmholtz_SLP_Self')
+        return self.Modified_Helmholtz_SLP_Self.Form(*args, **kwargs)
 
     ###### Method for generating close corrections
     def tolerance_to_distance(self, tol):
@@ -150,13 +164,16 @@ class Global_Smooth_Boundary(Boundary):
         """
         return -np.log(tol)*self.max_h/4.5
 
-    def Get_Close_Corrector(self, target, side, do_DLP, do_SLP, backend, kernel):
+    def Get_Close_Corrector(self, kernel, *args, **kwargs):
         if kernel == 'laplace':
             self.add_module('Laplace_Close_Quad')
-            return self.Laplace_Close_Quad.Get_Close_Corrector(target, side, do_DLP, do_SLP, backend)
+            return self.Laplace_Close_Quad.Get_Close_Corrector(*args, **kwargs)
         elif kernel == 'stokes':
             self.add_module('Stokes_Close_Quad')
-            return self.Stokes_Close_Quad.Get_Close_Corrector(target, side, do_DLP, do_SLP, backend)
+            return self.Stokes_Close_Quad.Get_Close_Corrector(*args, **kwargs)
+        elif kernel == 'modified_helmholtz':
+            self.add_module('Modified_Helmholtz_Close_Quad')
+            return self.Modified_Helmholtz_Close_Quad.Get_Close_Corrector(*args, **kwargs)
         else:
             raise Exception("Specified kernel: '" + kernel + "' not recognized.")
 

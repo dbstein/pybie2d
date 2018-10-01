@@ -69,7 +69,7 @@ def err_plot(up):
 # (and of course, for the squish boundary, we could easily figure out something
 #      faster, but this illustrates a general purpose routine)
 
-full_grid = Grid([-2,2], NG, [-2,2], NG, periodic=True)
+full_grid = Grid([-2,2], NG, [-2,2], NG)
 # this is hiding a lot of stuff!
 phys, ext = boundary.find_interior_points(full_grid)
 phys = full_grid.reshape(phys)
@@ -86,7 +86,7 @@ tau = np.linalg.solve(A, bc)
 # naive evaluation
 
 # generate a target for the physical grid
-gridp = Grid([-2,2], NG, [-2,2], NG, mask=phys, periodic=True)
+gridp = Grid([-2,2], NG, [-2,2], NG, mask=phys)
 
 # evaluate at the target points
 u = np.zeros_like(gridp.xg)
@@ -141,7 +141,7 @@ if NG <= 1000:
 ################################################################################
 # find physical region
 
-full_grid = Grid([-2,2], NG, [-2,2], NG, periodic=True)
+full_grid = Grid([-2,2], NG, [-2,2], NG)
 phys, ext = boundary.find_interior_points(full_grid)
 phys = full_grid.reshape(phys)
 ext = full_grid.reshape(ext)
@@ -157,7 +157,7 @@ tau = np.linalg.solve(A, bc)
 # naive evaluation
 
 # generate a target for the physical grid
-gridp = Grid([-2,2], NG, [-2,2], NG, mask=phys, periodic=True)
+gridp = Grid([-2,2], NG, [-2,2], NG, mask=phys)
 
 # evaluate at the target points
 up = Laplace_Layer_Apply(boundary, gridp, dipstr=tau)
@@ -168,7 +168,7 @@ up = Laplace_Layer_Apply(boundary, gridp, dipstr=tau)
 uph = up.copy()
 # to show how much easier the Pairing utility makes things
 pair = Pairing(boundary, gridp, 'i', 1e-12)
-code2 = pair.Setup_Close_Corrector(do_DLP=True)
+code2 = pair.Setup_Close_Corrector('laplace', do_DLP=True)
 pair.Close_Correction(uph, tau, code2)
 
 err_plot(uph)
@@ -179,7 +179,7 @@ err_plot(uph)
 if NG <= 1000:
 	uph = up.copy()
 	# to show how much easier the Pairing utility makes things
-	code1 = pair.Setup_Close_Corrector(do_DLP=True, backend='preformed')
+	code1 = pair.Setup_Close_Corrector('laplace', do_DLP=True, backend='preformed')
 	pair.Close_Correction(uph, tau, code1)
 
 	err_plot(uph)

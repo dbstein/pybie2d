@@ -49,15 +49,14 @@ def solution_func(x, y):
 	d2 = (x-pt_source_location.real)**2 + (y-pt_source_location.imag)**2
 	return ne.evaluate('log(sqrt(d2))')
 # grid on which to test solutions
-v = np.linspace(-2, 2, N, endpoint=False)
+v = np.linspace(-2, 2, N)
 x, y = np.meshgrid(v, v, indexing='ij')
-solution = solution_func(x, y)
 # get boundary condition
 bc = solution_func(boundary.x, boundary.y)
 
 def err_plot(up):
 	# compute the error
-	errorp = up - solution_func(x[phys], y[phys])
+	errorp = up - solution_func(gridp.x, gridp.y)
 	digitsp = -np.log10(np.abs(errorp)+1e-16)
 	digits = np.zeros_like(x)
 	digits[phys] = digitsp
@@ -82,7 +81,7 @@ def err_plot(up):
 # (and of course, for the squish boundary, we could easily figure out something
 #      faster, but this illustrates a general purpose routine)
 
-full_grid = Grid([-2,2], N, [-2,2], N, periodic=True)
+full_grid = Grid([-2,2], N, [-2,2], N)
 # fast computation of winding number via cauchy sums
 #	for smallish computations, accelerated via numba
 #	for large computations, accelerated via FMM
@@ -120,11 +119,11 @@ tau = np.linalg.solve(A, bc)
 # naive evaluation
 
 # generate a target for the physical grid
-gridp = Grid([-2,2], N, [-2,2], N, mask=phys, periodic=True)
+gridp = Grid([-2,2], N, [-2,2], N, mask=phys)
 
 # evaluate at the target points
 u = np.zeros_like(x)
-up = Laplace_Layer_Apply(boundary, gridp, charge=tau, dipstr=tau)
+up = Laplace_Layer_Apply(boundary, gridp, charge=tau, dipstr=tau, backend='numba')
 u[phys] = up
 
 err_plot(up)
@@ -175,7 +174,7 @@ err_plot(uph)
 ################################################################################
 # find physical region
 
-full_grid = Grid([-2,2], N, [-2,2], N, periodic=True)
+full_grid = Grid([-2,2], N, [-2,2], N)
 phys2, ext2 = boundary.find_interior_points(full_grid)
 phys2 = full_grid.reshape(phys2)
 ext2 = full_grid.reshape(ext2)
@@ -191,7 +190,7 @@ tau = np.linalg.solve(A, bc)
 # naive evaluation
 
 # generate a target for the physical grid
-gridp = Grid([-2,2], N, [-2,2], N, mask=phys, periodic=True)
+gridp = Grid([-2,2], N, [-2,2], N, mask=phys)
 
 # evaluate at the target points
 up = Laplace_Layer_Apply(boundary, gridp, charge=tau, dipstr=tau)
@@ -202,7 +201,7 @@ up = Laplace_Layer_Apply(boundary, gridp, charge=tau, dipstr=tau)
 uph = up.copy()
 # to show how much easier the Pairing utility makes things
 pair = Pairing(boundary, gridp, 'e', 1e-15)
-code1 = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, \
+code1 = pair.Setup_Close_Corrector('laplace', do_DLP=True, do_SLP=True, \
 													backend='preformed')
 pair.Close_Correction(uph, tau, code1)
 
@@ -213,7 +212,7 @@ err_plot(uph)
 
 uph = up.copy()
 # to show how much easier the Pairing utility makes things
-code3 = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=True, backend='fly')
+code3 = pair.Setup_Close_Corrector('laplace', do_DLP=True, do_SLP=True, backend='fly')
 pair.Close_Correction(uph, tau, code3)
 
 err_plot(uph)

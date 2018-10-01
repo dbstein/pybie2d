@@ -34,11 +34,13 @@ class Pairing(object):
         self.close_correctors = {}
     # end __init__ function definition
 
-    def Setup_Close_Corrector(self, do_DLP=False, do_SLP=False, kernel='laplace', backend='fly'):
-        code = (do_DLP, do_SLP, kernel, backend)
+    def Setup_Close_Corrector(self, kernel, **kwargs):
+        code = list(kwargs.values())
+        code.append(kernel)
+        code = tuple(code)
         if self.close_targ.N > 0:
             self.close_correctors[code] = \
-                self.source.Get_Close_Corrector(self.close_targ, self.side, do_DLP, do_SLP, backend, kernel)
+                self.source.Get_Close_Corrector(kernel, self.close_targ, self.side, **kwargs)
         else:
             self.close_correctors[code] = Null_Corrector()
         return code

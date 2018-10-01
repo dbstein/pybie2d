@@ -47,7 +47,7 @@ class Laplace_Close_Quad(object):
         return Compensated_Laplace_Apply(self.boundary, target, side, tau, do_DLP,
             do_SLP, gradient, main_type, gradient_type, backend, forstokes)
 
-    def Get_Close_Corrector(self, target, side, do_DLP, do_SLP, backend):
+    def Get_Close_Corrector(self, target, side, do_DLP=False, do_SLP=False, backend='fly'):
         return Laplace_Close_Corrector(self.boundary, target, side, do_DLP, do_SLP, backend)
 
 class Laplace_Close_Corrector(object):
@@ -214,13 +214,13 @@ def compensated_laplace_slp_preform(source, target, side, gradient=False):
         AFTER_MAT = -LA[:,None]*(source.weights/(2.0*np.pi))-MAT2.T
     else:
         MAT = CSLP
-        AFTER_MAT = np.zeros([target.N, source.N]), np.zeros([target.N, source.N])
+        AFTER_MAT = np.zeros([target.N, source.N])
     if gradient:
         if side == 'e':
             LD = 1.0/target_difference
             AFTER_DER_MAT = source.weights/(2.0*np.pi)*LD[:,None]
         else:
-            AFTER_DER_MAT = np.zeros([target.M, soure.N])
+            AFTER_DER_MAT = np.zeros([target.N, source.N])
         ret = MAT, (AFTER_MAT, AFTER_DER_MAT)
     else:
         ret = MAT, AFTER_MAT

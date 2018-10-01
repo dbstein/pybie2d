@@ -7,7 +7,7 @@ from pybie2d.misc.numba_special_functions import numba_k0, numba_k1
 
 print('\n-- Testing numba special function implementation --\n')
 # test the underlying numba implementations of i0, k0
-x = np.linspace(0,100,1000)
+x = np.linspace(0,100,10000)
 
 y1 = k0(x)
 y2 = numba_k0(x)
@@ -38,10 +38,10 @@ def get_random(sh, dtype):
 
 dtype=float
 
-ns = 200
-nt = 200
+ns = 2000
+nt = 2000
 test_self = False
-helmk = 100.0
+helmk = 10.0
 
 source = get_random([2, ns], float)
 target = source if test_self else get_random([2, nt], float)

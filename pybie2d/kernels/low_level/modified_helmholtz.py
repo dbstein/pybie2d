@@ -13,13 +13,14 @@ from ...misc.numba_special_functions import _numba_k0, _numba_k1, numba_k0, numb
 ################################################################################
 # Greens function and derivative for Modified Helmholtz Equation
 
+# these are both off by a factor of 1/(2*np.pi)
 def Modified_Helmholtz_Greens_Function(r, k):
-    return k**2*numba_k0(k*r)
+    return numba_k0(k*r)
 def Modified_Helmholtz_Greens_Function_Derivative(r, k):
     # note this needs to be multiplied by coordinate you are taking derivative
     # with respect to, e.g.:
     #   d/dx G(r, k) = x*GD(r,k)
-    return k**3*numba_k1(k*r)/r
+    return k*numba_k1(k*r)/r
 
 ################################################################################
 # General Purpose Low Level Source --> Target Kernel Apply Functions
@@ -38,9 +39,9 @@ def _modified_helmoholtz(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, ifcharge, 
                 r = np.sqrt(dx**2 + dy**2)
                 if ifdipole:
                     n_dot_d = nx[j]*dx + ny[j]*dy
-                    pot[i] += n_dot_d*k**3*_numba_k1(k*r)/r*dipstr[j]
+                    pot[i] += n_dot_d*k*_numba_k1(k*r)/r*dipstr[j]
                 if ifcharge:
-                    pot[i] += k**2*_numba_k0(k*r)*charge[j]
+                    pot[i] += _numba_k0(k*r)*charge[j]
 
 def Modified_Helmholtz_Kernel_Apply_numba(source, target, k=1.0, charge=None,
                                         dipstr=None, dipvec=None, weights=None):
@@ -75,58 +76,6 @@ def Modified_Helmholtz_Kernel_Apply_numba(source, target, k=1.0, charge=None,
     _modified_helmoholtz(sx, sy, tx, ty, ch, ds, nx, ny, pot, ifcharge, ifdipole, k)
     return pot
 
-# def Modified_Helmholtz_Kernel_Apply_numba(source, target, k=1.0, charge=None,
-#                                         dipstr=None, dipvec=None, weights=None):
-#     """
-#     Interface to numba-jitted Laplace Kernels
-#     Inputs:
-#         source,   required, float(2, ns),  source coordinates
-#         target,   required, float(2, nt),  target coordinates
-#         charge,   optional, float(ns),     charge at source locations
-#         dipstr,   optional, float(ns),     dipole strength at source locations
-#         dipvec,   optional, float(2, ns),  dipole orientation at source loc
-#         weights,  optional, float(ns),     quadrature weights
-#     Outputs:
-#         float(nt), potential at target coordinates
-#         if gradient == True:
-#     ns = number of source points; nt = number of target points
-#     """
-#     # weights = 1.0 if weights is None else weights
-#     # weighted_weights = -0.5*weights/np.pi
-#     # sx = source[0]
-#     # sy = source[1]
-#     # tx = target[0]
-#     # ty = target[1]
-#     # ifcharge = charge is not None
-#     # ifdipole = dipstr is not None
-#     # pot = np.zeros(target.shape[1], dtype=float)
-#     # zero_vec = np.zeros(source.shape[1], dtype=float)
-#     # ch = zero_vec if charge is None else charge*weighted_weights
-#     # ds = zero_vec if dipstr is None else dipstr*weighted_weights
-#     # nx = zero_vec if dipvec is None else dipvec[0]
-#     # ny = zero_vec if dipvec is None else dipvec[1]
-#     # if gradient:
-#     #     gradx = np.zeros(target.shape[1], dtype=float)
-#     #     grady = np.zeros(target.shape[1], dtype=float)
-#     #     _modified_helmholtz_gradient(sx, sy, tx, ty, ch, ds, nx, ny, pot, gradx, grady, ifcharge, ifdipole)
-#     #     return pot, gradx, grady
-#     # else:
-#     #     _modified_helmholtz_no_gradient(sx, sy, tx, ty, ch, ds, nx, ny, pot, ifcharge, ifdipole)
-#     #     return pot
-#     weights = 1.0 if weights is None else weights
-#     scale = 1.0/(2*np.pi)
-#     ch = charge*weights*scale if charge is not None else None
-#     ds = dipstr*weights*scale if dipstr is not None else None
-#     if source is target:
-#         out = FMM(kind='helmholtz', source=source, charge=ch,
-#                     dipstr=ds, dipvec=dipvec, compute_source_potential=True,
-#                     helmholtz_parameter=1j*k, direct=True)['source']
-#     else:
-#         out = FMM(kind='helmholtz', source=source, target=target, charge=ch,
-#                     dipstr=ds, dipvec=dipvec, compute_target_potential=True,
-#                     helmholtz_parameter=1j*k, direct=True)['target']
-#     return k**2*out['u'].real
-
 def Modified_Helmholtz_Kernel_Apply_FMM(source, target, k, charge=None,
                                         dipstr=None, dipvec=None, weights=None):
     """
@@ -153,7 +102,7 @@ def Modified_Helmholtz_Kernel_Apply_FMM(source, target, k, charge=None,
         out = FMM(kind='helmholtz', source=source, target=target, charge=ch,
                     dipstr=ds, dipvec=dipvec, compute_target_potential=True,
                     helmholtz_parameter=1j*k)['target']
-    return k**2*out['u'].real
+    return out['u'].real
 
 Modified_Helmholtz_Kernel_Applys = {}
 Modified_Helmholtz_Kernel_Applys['numba'] = Modified_Helmholtz_Kernel_Apply_numba

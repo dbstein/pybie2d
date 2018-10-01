@@ -24,7 +24,7 @@ class Stokes_Close_Quad(object):
         self.fsrc = self.boundary.generate_resampled_boundary(self.NF)
         self.fsrc.add_module('Laplace_Close_Quad')
 
-    def Get_Close_Corrector(self, target, side, do_DLP, do_SLP, backend):
+    def Get_Close_Corrector(self, target, side, do_DLP=False, do_SLP=False, backend='fly'):
         return Stokes_Close_Corrector(self.boundary, target, side, do_DLP, do_SLP, backend)
 
 class Stokes_Close_Corrector(object):
