@@ -37,7 +37,7 @@ class Grid(PointSet):
         self.Ny_adjust = self.Ny + (2-np.sum(self.y_endpoints))
         self.xv, self.xh = np.linspace(self.x_bounds[0], self.x_bounds[1],
                             self.Nx_adjust, retstep=True, endpoint=True)
-        self.yv, self.yh = np.linspace(self.x_bounds[0], self.x_bounds[1],
+        self.yv, self.yh = np.linspace(self.y_bounds[0], self.y_bounds[1],
                             self.Ny_adjust, retstep=True, endpoint=True)
         if not self.x_endpoints[0]:
             self.xv = self.xv[1:]

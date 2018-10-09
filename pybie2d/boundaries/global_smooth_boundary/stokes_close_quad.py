@@ -75,6 +75,7 @@ def Compensated_Stokes_Form(source, target, side, do_DLP=False, do_SLP=False):
     Mxy = np.array(np.bmat([Mx1, My1]))
     Mx = np.array(np.bmat([np.eye(source.N), np.zeros(sh)]))
     My = np.array(np.bmat([np.zeros(sh), np.eye(source.N)]))
+    Mc = Mx + 1j*My
     # get laplace compensated matrices
     _DL, DLG = source.Laplace_Close_Quad.Form(
                 target, side, do_DLP=do_DLP, do_SLP=do_SLP, gradient=True,
@@ -85,7 +86,6 @@ def Compensated_Stokes_Form(source, target, side, do_DLP=False, do_SLP=False):
         # construct resampling matrix
         RS = sp.signal.resample(np.eye(source.N), NF)
         # array that takes 2*src.N real density to resampled complex density
-        Mc = Mx + 1j*My
         RSMc = RS.dot(Mc)
         FL = source.Stokes_Close_Quad.fsrc.Laplace_Close_Quad.Form(
                 target, side, do_DLP=True, main_type='complex', forstokes=True)

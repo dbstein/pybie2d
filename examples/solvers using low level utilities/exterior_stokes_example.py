@@ -77,7 +77,7 @@ def err_plot(up, func):
 # (and of course, for the squish boundary, we could easily figure out something
 #      faster, but this illustrates a general purpose routine)
 
-full_grid = Grid([-2,2], N, [-2,2], N, periodic=True)
+full_grid = Grid([-2,2], N, [-2,2], N)
 # this is hiding a lot of stuff!
 ext, phys = boundary.find_interior_points(full_grid)
 phys = full_grid.reshape(phys)
@@ -94,7 +94,7 @@ tau = np.linalg.solve(A, bc)
 # naive evaluation
 
 # generate a target for the physical grid
-gridp = Grid([-2,2], N, [-2,2], N, mask=phys, periodic=True)
+gridp = Grid([-2,2], N, [-2,2], N, mask=phys)
 
 # evaluate at the target points
 u = np.zeros_like(gridp.xg)

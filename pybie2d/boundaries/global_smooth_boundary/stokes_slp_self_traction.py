@@ -47,7 +47,7 @@ def Stokes_SLP_Self_Traction_Form(source):
     TY = source.y[:,None]
     nx = source.normal_x[:,None]
     ny = source.normal_y[:,None]
-    weights = -source.weights/np.pi
+    weights = np.concatenate([source.weights, source.weights])
     G = np.zeros([2*ns, 2*ns], dtype=float)
     dx = ne.evaluate('TX - SX')
     dy = ne.evaluate('TY - SY')
@@ -55,15 +55,16 @@ def Stokes_SLP_Self_Traction_Form(source):
     W = np.empty_like(dx)
     GH = np.empty_like(dx)
     d_dot_n_ir4 = ne.evaluate('(dx*nx + dy*ny)*id2*id2', out=W)
-    ne.evaluate('weights*d_dot_n_ir4*dx*dx', out=GH)
+    ipi = 1.0/np.pi
+    ne.evaluate('-ipi*d_dot_n_ir4*dx*dx', out=GH)
     G[:ns, :ns] += GH
-    ne.evaluate('weights*d_dot_n_ir4*dx*dy', out=GH)
+    ne.evaluate('-ipi*d_dot_n_ir4*dx*dy', out=GH)
     G[ns:, :ns] += GH
     G[:ns, ns:] += GH
-    ne.evaluate('weights*d_dot_n_ir4*dy*dy', out=GH)   
+    ne.evaluate('-ipi*d_dot_n_ir4*dy*dy', out=GH)   
     G[ns:, ns:] += GH
     # now fill in the correct diagonal limits
-    scale = -0.5*source.curvature*source.weights/np.pi
+    scale = -0.5*source.curvature/np.pi
     tx = source.tangent_x
     ty = source.tangent_y
     s01 = scale*tx*ty
@@ -71,7 +72,7 @@ def Stokes_SLP_Self_Traction_Form(source):
     np.fill_diagonal(G[ns:, :ns], s01)
     np.fill_diagonal(G[:ns, ns:], s01)
     np.fill_diagonal(G[ns:, ns:], scale*ty*ty)
-    return G
+    return G*weights
 
 @numba.njit(parallel=True)
 def _SSKT(sx, sy, fx, fy, nx, ny, u, v):

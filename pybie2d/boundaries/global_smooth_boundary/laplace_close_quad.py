@@ -203,7 +203,7 @@ def compensated_laplace_slp_preform(source, target, side, gradient=False):
     method = source.Laplace_Close_Quad
     target_difference = source.get_inside_point() - target.c
     # check if the CSLP Matrix was already generated
-    CSLP = cslp_method.Form(side)
+    CSLP = cslp_method.Form(side).copy()
     if side == 'e':
         # what gets done before cauchy
         MAT1 = CSLP + method.sawlog[:,None]*(source.weights/(2.0*np.pi))

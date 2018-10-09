@@ -15,7 +15,7 @@ And to give you an idea what is going on under the hood in the
 	higher level routines
 """
 
-N = 100
+N = 200
 
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle
@@ -32,22 +32,43 @@ Pairing = pybie2d.pairing.Pairing
 # define problem
 
 # boundary
-boundary = GSB(c=squish(N,r=2,b=0.3,rot=np.pi/4.0))
+boundary = GSB(c=squish(N,x=0.0,y=0.0,r=2,b=0.3,rot=np.pi/6.0))
 boundary.add_module('Stokes_SLP_Self_Traction')
 boundary.add_module('Stokes_Close_Quad')
 # solution
-solution_func_u = lambda x, y: 2*y# + x**2
-solution_func_v = lambda x, y: 0.5*x
-solution_func_p = lambda x, y: 0.0
-solution_stress_xx = lambda x, y: 2*x*0.0
-solution_stress_xy = lambda x, y: -5.0/2.0*np.ones_like(x)
-solution_stress_yy = lambda x, y: 0.0*np.ones_like(x)
-bstress_xx = solution_stress_xx(boundary.x, boundary.y)
-bstress_xy = solution_stress_xy(boundary.x, boundary.y)
-bstress_yy = solution_stress_yy(boundary.x, boundary.y)
-bcu = boundary.normal_x*bstress_xx + boundary.normal_y*bstress_xy
-bcv = boundary.normal_x*bstress_xy + boundary.normal_y*bstress_yy
-bc = -np.concatenate([bcu, bcv])
+def solution_function(x, y):
+	locx = -3
+	locy = -3
+	dx = x - locx
+	dy = y - locy
+	r = np.sqrt(dx**2 + dy**2)
+	u = (-np.log(r) + dx*(dx+dy)/r**2)/(4*np.pi)
+	v = (-np.log(r) + dy*(dx+dy)/r**2)/(4*np.pi)
+	p = (dx+dy)/(2*np.pi*r**2)
+	return u, v, p
+def solution_function_stress(x, y):
+	locx = -3
+	locy = -3
+	dx = x - locx
+	dy = y - locy
+	r = np.sqrt(dx**2 + dy**2)
+	ux = ((dx+dy)/r**2 - 2*(dx**3 + dx**2*dy)/r**4) / (4*np.pi)
+	uy = ((dx-dy)/r**2 - 2*(dx**2*dy + dx*dy**2)/r**4) / (4*np.pi)
+	vx = ((dy-dx)/r**2 - 2*(dx**2*dy + dx*dy**2)/r**4) / (4*np.pi)
+	vy = ((dx+dy)/r**2 - 2*(dy**3 + dy**2*dx)/r**4) / (4*np.pi)
+	p = (dx+dy)/(2*np.pi*r**2)
+	sxx = -p + 2*ux
+	sxy = uy + vx
+	syy = -p + 2*vy
+	return sxx, sxy, syy
+def solution_function_u(x, y):
+	return solution_function(x,y)[0]
+def solution_function_v(x, y):
+	return solution_function(x,y)[1]
+bsxx, bsxy, bsyy = solution_function_stress(boundary.x, boundary.y)
+bcu = boundary.normal_x*bsxx + boundary.normal_y*bsxy
+bcv = boundary.normal_x*bsxy + boundary.normal_y*bsyy
+bc = np.concatenate([bcu, bcv])
 
 def err_plot(up, func):
 	# compute the error
@@ -87,13 +108,9 @@ ext = full_grid.reshape(ext)
 
 TRA = boundary.Stokes_SLP_Self_Traction.Form()
 A = 0.5*np.eye(2*boundary.N) + TRA
-# fix the nullspaces
-A[:,0] = np.concatenate([boundary.normal_x, boundary.normal_y])
-A[:boundary.N,1] = 1.0
-A[boundary.N:,1] = 0.0
-A[:boundary.N,2] = 0.0
-A[boundary.N:,2] = 1.0
-tau = np.linalg.solve(A, bc)
+
+iA = np.linalg.pinv(A)
+tau = iA.dot(bc)
 
 ################################################################################
 # naive evaluation
@@ -104,22 +121,49 @@ gridp = Grid([-2,2], N, [-2,2], N, mask=phys)
 # evaluate at the target points
 u = np.zeros_like(gridp.xg)
 v = np.zeros_like(gridp.xg)
-Up = Stokes_Layer_Apply(boundary, gridp, forces=tau, backend='FMM',
+Up = Stokes_Layer_Apply(boundary, gridp, forces=tau, backend='fly',
 															out_type='stacked')
 up = Up[0]
 vp = Up[1]
+
+# fix the nullspace issues
+if True:
+	ztrg = PointSet(x=np.array([0.0,1.0]), y=np.array([0.0,0.0]))
+	ue0, ve0, pe0 = solution_function(ztrg.x, ztrg.y)
+	close_mat = Compensated_Stokes_Form(boundary, ztrg, 'i', do_SLP=True)
+	U0 = close_mat.dot(tau)
+	u0, v0 = U0[:ztrg.N], U0[ztrg.N:]
+	u0 = u0 + 1j*v0
+	ue0 = ue0 + 1j*ve0
+	du0 = ue0-u0
+	uconst = du0[0]
+	urot = (du0[1] - du0[0]).imag
+	uadj = 1j*urot*gridp.c
+	up += uconst.real + uadj.real
+	vp += uconst.imag + uadj.imag
+
 u[phys] = up
 v[phys] = vp
 
-err_plot(up, solution_func_u)
-err_plot(vp, solution_func_v)
+def destroy_ticks(ax):
+	ax.set_xticks([])
+	ax.set_yticks([])
+	ax.set_xticklabels([])
+	ax.set_yticklabels([])
 
-ua = np.zeros_like(gridp.xg)
-ua[phys] = solution_func_u(gridp.x, gridp.y)
+ua = solution_function_u(gridp.xg, gridp.yg)
+fig, [ax1, ax2] = plt.subplots(1,2)
+clf1 = ax1.pcolormesh(gridp.xg, gridp.yg, np.ma.array(u, mask=ext))
+clf2 = ax2.pcolormesh(gridp.xg, gridp.yg, np.ma.array(ua, mask=ext))
+plt.colorbar(clf1, ax=ax1)
+plt.colorbar(clf2, ax=ax2)
+destroy_ticks(ax1)
+destroy_ticks(ax2)
+ax1.set_aspect('equal')
+ax2.set_aspect('equal')
 
-fig, [ax1,ax2] = plt.subplots(1,2)
-ax1.imshow(u)
-ax2.imshow(ua)
+err_plot(up, solution_function_u)
+err_plot(vp, solution_function_v)
 
 ################################################################################
 # correct with close evaluation (preformed)
@@ -133,7 +177,7 @@ close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
 # generate close eval matrix
 close_mat = Compensated_Stokes_Form(boundary, close_trg, 'i', do_SLP=True)
 # generate naive matrix
-naive_mat = Stokes_Layer_Form(boundary, close_trg, ifforces=True)
+naive_mat = Stokes_Layer_Form(boundary, close_trg, ifforce=True)
 # construct close correction matrix
 correction_mat = close_mat - naive_mat
 # get correction
@@ -143,86 +187,6 @@ correction = correction_mat.dot(tau)
 uph[close_pts] += correction[:close_trg.N]
 vph[close_pts] += correction[close_trg.N:]
 
-err_plot(uph, solution_func_u)
-err_plot(vph, solution_func_v)
-
-################################################################################
-##### solve problem the easy way ###############################################
-################################################################################
-
-################################################################################
-# find physical region
-
-full_grid = Grid([-2,2], N, [-2,2], N)
-phys, ext = boundary.find_interior_points(full_grid)
-phys = full_grid.reshape(phys)
-ext = full_grid.reshape(ext)
-
-################################################################################
-# solve for the density
-
-DLP = Stokes_Layer_Singular_Form(boundary, ifdipole=True)
-A = -0.5*np.eye(2*boundary.N) + DLP
-# fix the nullspace
-A[:,0] += np.concatenate([boundary.normal_x, boundary.normal_y])
-tau = np.linalg.solve(A, bc)
-
-################################################################################
-# naive evaluation
-
-# generate a target for the physical grid
-gridp = Grid([-2,2], N, [-2,2], N, mask=phys)
-
-# evaluate at the target points
-Up = Stokes_Layer_Apply(boundary, gridp, dipstr=tau, backend='FMM',
-															out_type='stacked')
-
-################################################################################
-# correct with pair routines (on the fly)
-
-Up1 = Up.copy()
-# to show how much easier the Pairing utility makes things
-pair = Pairing(boundary, gridp, 'i', 1e-12)
-code2 = pair.Setup_Close_Corrector(do_DLP=True, kernel='stokes')
-pair.Close_Correction(Up1.ravel(), tau, code2)
-up = Up1[0]
-vp = Up1[1]
-
-err_plot(up, solution_func_u)
-err_plot(vp, solution_func_v)
-
-################################################################################
-# correct with pair routines (preformed)
-
-Up1 = Up.copy()
-# to show how much easier the Pairing utility makes things
-code1 = pair.Setup_Close_Corrector(do_DLP=True, kernel='stokes', backend='preformed')
-pair.Close_Correction(Up1.ravel(), tau, code1)
-
-up = Up1[0]
-vp = Up1[1]
-
-err_plot(up, solution_func_u)
-err_plot(vp, solution_func_v)
-
-################################################################################
-# generate a target that heads up to the boundary
-
-px, py = boundary.x, boundary.y
-nx, ny = boundary.normal_x, boundary.normal_y
-adj = 1.0/10**np.arange(2,16)
-tx = (px - nx*adj[:,None]).flatten()
-ty = (py - ny*adj[:,None]).flatten()
-
-approach_targ = PointSet(tx, ty)
-mat = Compensated_Stokes_Form(boundary, approach_targ, 'i', do_DLP=True).real
-sol = mat.dot(tau)
-sol_u = sol[:approach_targ.N]
-sol_v = sol[approach_targ.N:]
-true_u = solution_func_u(tx, ty)
-true_v = solution_func_v(tx, ty)
-err_u = np.abs(true_u-sol_u)
-err_v = np.abs(true_v-sol_v)
-print('Error approaching boundary in u is: {:0.3e}'.format(err_u.max()))
-print('Error approaching boundary in v is: {:0.3e}'.format(err_v.max()))
+err_plot(uph, solution_function_u)
+err_plot(vph, solution_function_v)
 
