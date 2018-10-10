@@ -67,7 +67,7 @@ class LaplaceDirichletSolver(object):
 					if i != j:
 						bdyj = self.collection.boundaries[j]
 						pair = Pairing(bdyi, bdyj, self.collection.sides[i], self.tolerance)
-						code = pair.Setup_Close_Corrector(do_DLP=True, do_SLP=self.collection.sides[i]=='e', backend=backend)
+						code = pair.Setup_Close_Corrector(kernel='laplace', do_DLP=True, do_SLP=self.collection.sides[i]=='e', backend=backend)
 						self.pairings[i,j] = pair
 						self.codes[i,j] = code
 					else:

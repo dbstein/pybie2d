@@ -16,7 +16,7 @@ And to give you an idea what is going on under the hood in the
 	higher level routines
 """
 
-NG = 2000
+NG = 10
 h_max = 1.0/NG
 
 # extract some functions for easy calling

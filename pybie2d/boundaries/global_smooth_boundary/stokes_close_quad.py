@@ -64,6 +64,34 @@ def _stokes_correction(u, corr, close_pts):
     u[:N][close_pts] += corr[:NC]
     u[N:][close_pts] += corr[NC:]
 
+def Compensated_Stokes_DLP_Pressure_Form(source, target, side):
+    sh = (source.N, source.N)
+    Mx = np.array(np.bmat([np.eye(source.N), np.zeros(sh)]))
+    My = np.array(np.bmat([np.zeros(sh), np.eye(source.N)]))
+    _DL, DLGX, DLGY = source.Laplace_Close_Quad.Form(
+                target, side, do_DLP=True, gradient=True,
+                main_type='real', gradient_type='real', forstokes=True)
+    M3 = DLGX.dot(Mx)
+    M4 = DLGY.dot(My)
+    return -2*(M3 + M4)
+
+def Compensated_Stokes_DLP_Pressure_Apply(source, target, side, tau, backend='fly'):
+    taux = tau[:source.N]
+    tauy = tau[source.N:]
+    _, u3x, u3y = source.Laplace_Close_Quad.Apply(target, side, taux, do_DLP=True, gradient=True, gradient_type='real', backend=backend, forstokes=True)
+    _, u4x, u4y = source.Laplace_Close_Quad.Apply(target, side, tauy, do_DLP=True, gradient=True, gradient_type='real', backend=backend, forstokes=True)
+    return -2*(u3x + u4y)
+
+def Compensated_Stokes_SLP_Pressure_Apply(source, target, side, tau, backend='fly'):
+    NF = source.Stokes_Close_Quad.NF
+    fsrc = source.Stokes_Close_Quad.fsrc
+    taux = tau[:source.N]
+    tauy = tau[source.N:]
+    tauc = taux + 1j*tauy
+    ftauc = sp.signal.resample(tauc, NF)
+    sigf = ftauc/fsrc.normal_c
+    return fsrc.Laplace_Close_Quad.Apply(target, side, sigf, do_DLP=True, backend=backend)
+
 def Compensated_Stokes_Form(source, target, side, do_DLP=False, do_SLP=False):
     # arrays that manipulate form of density
     # there's almost certainly a faster way to deal with some of these things

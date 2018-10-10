@@ -35,8 +35,8 @@ Pairing = pybie2d.pairing.Pairing
 boundary = GSB(c=squish(N,r=2,b=0.3,rot=np.pi/4.0))
 boundary.add_module('Stokes_Close_Quad')
 # solution
-solution_func_u = lambda x, y: 2*y
-solution_func_v = lambda x, y: 0.5*x
+solution_func_u = lambda x, y: 2*y + x
+solution_func_v = lambda x, y: 0.5*x - y
 bcu = solution_func_u(boundary.x, boundary.y)
 bcv = solution_func_v(boundary.x, boundary.y)
 bc = np.concatenate([bcu, bcv])
@@ -108,7 +108,7 @@ err_plot(vp, solution_func_v)
 uph = up.copy()
 vph = vp.copy()
 # get distance to do close evaluation on from tolerance
-close_distance = boundary.tolerance_to_distance(1e-12)
+close_distance = boundary.tolerance_to_distance(1e-14)
 close_pts = gridp.find_near_points(boundary, close_distance)
 close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
 # generate close eval matrix
@@ -127,6 +127,9 @@ vph[close_pts] += correction[close_trg.N:]
 err_plot(uph, solution_func_u)
 err_plot(vph, solution_func_v)
 
+u[phys] = uph
+v[phys] = vph
+
 ################################################################################
 ##### solve problem the easy way ###############################################
 ################################################################################
@@ -142,11 +145,13 @@ ext = full_grid.reshape(ext)
 ################################################################################
 # solve for the density
 
+st = time.time()
 DLP = Stokes_Layer_Singular_Form(boundary, ifdipole=True)
 A = -0.5*np.eye(2*boundary.N) + DLP
 # fix the nullspace
 A[:,0] += np.concatenate([boundary.normal_x, boundary.normal_y])
 tau = np.linalg.solve(A, bc)
+et = time.time()
 
 ################################################################################
 # naive evaluation
@@ -155,8 +160,7 @@ tau = np.linalg.solve(A, bc)
 gridp = Grid([-2,2], N, [-2,2], N, mask=phys)
 
 # evaluate at the target points
-Up = Stokes_Layer_Apply(boundary, gridp, dipstr=tau, backend='FMM',
-															out_type='stacked')
+Up = Stokes_Layer_Apply(boundary, gridp, dipstr=tau, backend='fly', out_type='stacked')
 
 ################################################################################
 # correct with pair routines (on the fly)

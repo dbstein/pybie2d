@@ -34,7 +34,6 @@ Cauchy_Layer_Apply = pybie2d.kernels.high_level.cauchy.Cauchy_Layer_Apply
 Find_Near_Points = pybie2d.misc.near_points.find_near_points
 Pairing = pybie2d.pairing.Pairing
 CollectionPairing = pybie2d.pairing.CollectionPairing
-Close_Corrector = pybie2d.close.Close_Corrector
 Boundary_Collection = pybie2d.boundaries.collection.BoundaryCollection
 LaplaceDirichletSolver = pybie2d.solvers.laplace_dirichlet.LaplaceDirichletSolver
 Evaluate_Tau = pybie2d.solvers.laplace_dirichlet.Evaluate_Tau
@@ -114,14 +113,14 @@ tau = solver.solve(bc, disp=True, restart=100, tol=1e-14)
 ################################################################################
 # find physical region
 
-full_grid = Grid([-2,2], N, [-2,2], N, periodic=True)
+full_grid = Grid([-2,2], N, [-2,2], N)
 phys, ext = boundary.compute_physical_region(target=full_grid)
 
 ################################################################################
 # evaluate solution (no close corrections)
 
 print('Evaluating solution on grid')
-gridp = Grid([-2,2], N, [-2,2], N, mask=phys, periodic=True)
+gridp = Grid([-2,2], N, [-2,2], N, mask=phys)
 
 up = Evaluate_Tau(boundary, gridp, tau)
 err_plot(up)
@@ -132,6 +131,7 @@ err_plot(up)
 print('Setting up close corrections')
 pair = CollectionPairing(boundary, gridp, 1e-12)
 code = pair.Setup_Close_Corrector(
+	kernel = 'laplace',
 	e_args={'do_DLP' : True, 'do_SLP' : True, },
 	i_args={'do_DLP' : True, }
 )

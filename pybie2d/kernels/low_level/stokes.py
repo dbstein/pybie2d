@@ -136,6 +136,28 @@ Stokes_Kernel_Applys = {}
 Stokes_Kernel_Applys['numba'] = Stokes_Kernel_Apply_numba
 Stokes_Kernel_Applys['FMM']   = Stokes_Kernel_Apply_FMM
 
+def Stokes_Pressure_Apply_FMM(source, target, forces=None, dipstr=None,
+                                                    dipvec=None, weights=None):
+    """
+    Interface to FMM Stokes Kernels
+    Inputs:
+        source,   required, float(2, ns),  source coordinates
+        target,   required, float(2, nt),  target coordinates
+        forces,   optional, float(2, ns),  forces at source locations
+        dipstr,   optional, float(2, ns),  dipole strength at source locations
+        dipvec,   optional, float(2, ns),  dipole orientation at source loc
+        weights,  optional, float(ns),     quadrature weights
+    Outputs:
+        float(2, nt), velocity at target coordinates
+    ns = number of source points; nt = number of target points
+    """
+    weights = 1.0 if weights is None else weights
+    wf = None if forces is None else forces*weights
+    wd = None if dipstr is None else dipstr*weights
+    out = FMM(kind='stokes', source=source, target=target, forces=wf, 
+            dipstr=wd, dipvec=dipvec, compute_target_stress=True)['target']
+    return out['p']
+
 def Stokes_Kernel_Apply(source, target, forces=None, dipstr=None, dipvec=None,
                                                 weights=None, backend='numba'):
     """

@@ -26,7 +26,9 @@ Stokes_Layer_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Form
 Stokes_Layer_Singular_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Singular_Form
 Stokes_Layer_Apply = pybie2d.kernels.high_level.stokes.Stokes_Layer_Apply
 Compensated_Stokes_Form = pybie2d.boundaries.global_smooth_boundary.stokes_close_quad.Compensated_Stokes_Form
+Compensated_Stokes_SLP_Pressure_Apply = pybie2d.boundaries.global_smooth_boundary.stokes_close_quad.Compensated_Stokes_SLP_Pressure_Apply
 Pairing = pybie2d.pairing.Pairing
+Stokes_Pressure_Apply_FMM = pybie2d.kernels.low_level.stokes.Stokes_Pressure_Apply_FMM
 
 ################################################################################
 # define problem
@@ -65,6 +67,8 @@ def solution_function_u(x, y):
 	return solution_function(x,y)[0]
 def solution_function_v(x, y):
 	return solution_function(x,y)[1]
+def solution_function_p(x, y):
+	return solution_function(x,y)[2]
 bsxx, bsxy, bsyy = solution_function_stress(boundary.x, boundary.y)
 bcu = boundary.normal_x*bsxx + boundary.normal_y*bsxy
 bcv = boundary.normal_x*bsxy + boundary.normal_y*bsyy
@@ -190,3 +194,12 @@ vph[close_pts] += correction[close_trg.N:]
 err_plot(uph, solution_function_u)
 err_plot(vph, solution_function_v)
 
+################################################################################
+# Compute the pressure
+
+tau_stacked = tau.reshape([2, boundary.N])
+p = Stokes_Pressure_Apply_FMM(boundary.get_stacked_boundary(), gridp.get_stacked_boundary(), forces=tau_stacked, weights=boundary.weights)
+close_eval = Compensated_Stokes_SLP_Pressure_Apply(boundary, close_trg, 'i', tau)
+# get constant adjustment
+p[close_pts] = close_eval
+err_plot(p, solution_function_p)

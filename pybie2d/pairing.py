@@ -35,9 +35,11 @@ class Pairing(object):
     # end __init__ function definition
 
     def Setup_Close_Corrector(self, kernel, **kwargs):
-        code = list(kwargs.values())
-        code.append(kernel)
-        code = tuple(code)
+        code1 = list(kwargs.values())
+        code1.append(kernel)
+        code2 = list(kwargs.keys())
+        code2.append('kernel')
+        code = (tuple(code1),tuple(code2))
         if self.close_targ.N > 0:
             self.close_correctors[code] = \
                 self.source.Get_Close_Corrector(kernel, self.close_targ, self.side, **kwargs)
@@ -77,13 +79,13 @@ class CollectionPairing(object):
             self.close_correctors.append(
                 Pairing(bdy, target, side=side, error_tol=self.error_tol)
             )
-    def Setup_Close_Corrector(self, e_args={}, i_args={}):
+    def Setup_Close_Corrector(self, kernel, e_args={}, i_args={}):
         code = (e_args, i_args)
         icode = code
         ecode = code
         for i in range(self.collection.n_boundaries):
             args = e_args if self.collection.sides[i] == 'e' else i_args
-            code = self.close_correctors[i].Setup_Close_Corrector(**args)
+            code = self.close_correctors[i].Setup_Close_Corrector(kernel, **args)
             if self.collection.sides[i] == 'i':
                 icode = code
             else:
