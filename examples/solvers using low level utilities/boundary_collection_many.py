@@ -14,6 +14,8 @@ Demonstrate how to use the pybie2d package to solve an interior/exterior
 Laplace problem on a complicated domain using a global quadrature
 """
 
+sst = time.time()
+
 N = 1000
 NBS = [600]*22
 NBS[1] = 500
@@ -105,9 +107,9 @@ def err_plot(up):
 print('\n\n----- Iterative Solver -----\n\n')
 print('Generating Solver')
 solver = LaplaceDirichletSolver(boundary, solve_type='iterative', check_close=True)
+# solver = LaplaceDirichletSolver(boundary, solve_type='formed', check_close=True)
 
 print('Running iterative solver')
-
 tau = solver.solve(bc, disp=True, restart=100, tol=1e-14)
 
 ################################################################################
@@ -132,11 +134,14 @@ print('Setting up close corrections')
 pair = CollectionPairing(boundary, gridp, 1e-12)
 code = pair.Setup_Close_Corrector(
 	kernel = 'laplace',
-	e_args={'do_DLP' : True, 'do_SLP' : True, },
-	i_args={'do_DLP' : True, }
+	e_args={'do_DLP' : True, 'do_SLP' : True, 'backend' : 'preformed'},
+	i_args={'do_DLP' : True, 'backend' : 'preformed'}
 )
 print('Evaluating close corrections')
 st = time.time()
 pair.Close_Correction(up, tau, code)
 et = time.time()
 err_plot(up)
+
+eet = time.time()
+

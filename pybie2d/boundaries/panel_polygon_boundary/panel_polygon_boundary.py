@@ -56,6 +56,76 @@ class Panel_Polygon_Boundary(Boundary):
                 self.panel_inds.append([bottom_ind, bottom_ind + self.order])
                 bottom_ind += self.order
         self.complex_weights = self.scaled_cp
+    def prepare_oversampling(self, max_h):
+        """
+        Prepares an oversampled boudnary, and an oversampling routine
+        Every panel on the oversampled grid will be at least as resolved as
+        specified by the input variable max_h
+        """
+        # construct fine panels
+        structures = []
+        for panel in self.panels:
+            if panel.h_max <= max_h:
+                structures.append(panel)
+            else:
+                line = _Panel_Line_Boundary( panel.x1, panel.x2, panel.y1,
+                                                    panel.y2, max_h, self.order)
+                structures.append(line)
+        # construct quadrature information from fine panels
+        fine_xs = []
+        fine_ys = []
+        fine_normal_xs = []
+        fine_normal_ys = []
+        fine_weights = []
+        for panel in structures:
+            fine_xs = np.concatenate([fine_xs, panel.x])
+            fine_ys = np.concatenate([fine_ys, panel.y])
+            fine_normal_xs = np.concatenate([fine_normal_xs, panel.normal_x])
+            fine_normal_ys = np.concatenate([fine_normal_ys, panel.normal_y])
+            fine_weights = np.concatenate([fine_weights, panel.weights])
+        # construct a new PointSet with the relevant objects
+        fine_boundary = BasicPanel(x=fine_xs, y=fine_ys, nx=fine_normal_xs, ny=fine_normal_ys, w=fine_weights)
+        # construct an interpolation matrix
+        IMAT = np.zeros([fine_boundary.N, self.N])
+        n_panels = len(self.panels)
+        tracker = 0
+        for i in range(n_panels):
+            if type(structures[i]) == _panel:
+                TEMP = IMAT[tracker*self.order:(tracker+1)*self.order,i*self.order:(i+1)*self.order]
+                np.fill_diagonal(TEMP, 1.0)
+                tracker += 1
+            if type(structures[i]) == _Panel_Line_Boundary:
+                line = structures[i]
+                usex = np.abs(line.x2 - line.x1) > 0
+                if usex:
+                    lx1 = line.x1
+                    lx2 = line.x2
+                else:
+                    lx1 = line.y1
+                    lx2 = line.y2
+                lxd = lx2 - lx1
+                for j in range(line.n_panels):
+                    panel = line.panels[j]
+                    if usex:
+                        px1 = panel.x1
+                        px2 = panel.x2
+                    else:
+                        px1 = panel.y1
+                        px2 = panel.y2
+                    t1 = (px1 - lx1)/lxd
+                    t2 = (px2 - lx1)/lxd
+                    # transform t1, t2 to -1, 1 interval
+                    t1 = 2*t1 - 1
+                    t2 = 2*t2 - 1
+                    # get t values to interpolate to
+                    tv = (line.gauss_node+1)*(t2-t1)/2.0 + t1
+                    C_mat = np.polynomial.legendre.legvander(line.gauss_node, self.order-1)
+                    E_mat = np.polynomial.legendre.legvander(tv, self.order-1)
+                    I_mat = E_mat.dot(np.linalg.inv(C_mat))
+                    IMAT[tracker*self.order:(tracker+1)*self.order,i*self.order:(i+1)*self.order] = I_mat
+                    tracker += 1
+        return fine_boundary, IMAT
+
     def Laplace_Correct_Close_Setup(self, target, side=None, stokes=False):
         """
         u: uncorrected evaluation u
@@ -434,5 +504,31 @@ class _panel(object):
             self.stacked_boundary_T = self.stacked_boundary.T
             self.boundary_stacked = True
 
+class BasicPanel(object):
+    def __init__(self, x, y, nx, ny, w):
+        self.x = x
+        self.y = y
+        self.c = self.x + 1j*self.y
+        self.weights = w
+        self.normal_x = nx
+        self.normal_y = ny
+        self.normal_c = self.normal_x + 1j*self.normal_y
+        self.N = self.x.shape[0]
+    def stack_normal(self):
+        if not hasattr(self, 'normal_stacked'):
+            self.stacked_normal = np.column_stack([self.normal_x, self.normal_y])
+            self.stacked_normal_T = self.stacked_normal.T
+        self.normal_stacked = True
+    def get_stacked_normal(self, T=True):
+        self.stack_normal()
+        return self.stacked_normal_T if T else self.stacked_normal
+    def get_stacked_boundary(self, T=True):
+        self.stack_boundary()
+        return self.stacked_boundary_T if T else self.stacked_boundary
+    def stack_boundary(self):
+        if not hasattr(self, 'boundary_stacked'):
+            self.stacked_boundary = np.column_stack([self.x, self.y])
+            self.stacked_boundary_T = self.stacked_boundary.T
+            self.boundary_stacked = True
 
 
