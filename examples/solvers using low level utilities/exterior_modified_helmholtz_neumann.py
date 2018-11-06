@@ -1,13 +1,17 @@
 import numpy as np
+import scipy as sp
+import scipy.signal
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.path
+import time
 plt.ion()
 import pybie2d
 
 """
-Demonstrate how to use the pybie2d package to solve an interior Modified Helmholtz problem
-On a complicated domain using a global quadrature
+To solve an interior Modified Helmholtz problem
+On a complicated domain using a global quadr
+Demonstrate how to use the pybie2d package tature
 
 This example demonstrates how to do this entirely using low-level routines,
 To demonstrate both how to use these low level routines
@@ -15,9 +19,9 @@ And to give you an idea what is going on under the hood in the
 	higher level routines
 """
 
-NB = 500
-NG = 100
-helmholtz_k = 10.0
+NB = 200
+NG = 200
+helmholtz_k = 2.0
 
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle
@@ -27,6 +31,7 @@ PointSet = pybie2d.point_set.PointSet
 Find_Near_Points = pybie2d.misc.near_points.find_near_points
 Pairing = pybie2d.pairing.Pairing
 k0 = pybie2d.misc.numba_special_functions.numba_k0
+k1 = pybie2d.misc.numba_special_functions.numba_k1
 Modified_Helmholtz_Layer_Apply = pybie2d.kernels.high_level.modified_helmholtz.Modified_Helmholtz_Layer_Apply
 
 ################################################################################
@@ -36,19 +41,25 @@ Modified_Helmholtz_Layer_Apply = pybie2d.kernels.high_level.modified_helmholtz.M
 boundary = GSB(c=squish(NB,r=2,b=0.3,rot=np.pi/4.0))
 # solution
 def _solution_func(x, y):
-	dx = x - (-0.5)
-	dy = y - 1.0
+	dx = x - 0.0
+	dy = y - 0.0
 	r = np.sqrt(dx**2 + dy**2)
-	return helmholtz_k**2*k0(helmholtz_k*r)/(2*np.pi)
-bc = _solution_func(boundary.x, boundary.y)
-bcmax = bc.max()
+	return k0(helmholtz_k*r)/(2*np.pi)
+def _solution_func_dn(x, y, nx, ny):
+	dx = x - 0.0
+	dy = y - 0.0
+	r = np.sqrt(dx**2 + dy**2)
+	dd = helmholtz_k*k1(helmholtz_k*r)/(2*np.pi*r)
+	return (nx*dx+ny*dy)*dd
+bc = _solution_func_dn(boundary.x, boundary.y, boundary.normal_x, boundary.normal_y)
+bcmax = np.abs(bc).max()
 bc /= bcmax
 def solution_func(x, y):
 	return _solution_func(x, y)/bcmax
 
 def err_plot(up):
 	# compute the error
-	errorp = up - solution_func(full_grid.xg[phys], full_grid.yg[phys])
+	errorp = up - solution_func(gridp.x, gridp.y)
 	digitsp = -np.log10(np.abs(errorp)+1e-16)
 	digits = np.zeros_like(full_grid.xg)
 	digits[phys] = digitsp
@@ -75,7 +86,7 @@ def err_plot(up):
 
 full_grid = Grid([-2,2], NG, [-2,2], NG)
 # this is hiding a lot of stuff!
-phys, ext = boundary.find_interior_points(full_grid)
+ext, phys = boundary.find_interior_points(full_grid)
 phys = full_grid.reshape(phys)
 ext = full_grid.reshape(ext)
 
@@ -83,7 +94,8 @@ ext = full_grid.reshape(ext)
 # solve for the density
 
 DLP = boundary.Modified_Helmholtz_DLP_Self_Form(helmholtz_k)
-A = -0.5*np.eye(boundary.N)*helmholtz_k**2 + DLP
+SLPp = -(DLP/boundary.weights).T*boundary.weights
+A = 0.5*np.eye(boundary.N) + SLPp
 tau = np.linalg.solve(A, bc)
 
 ################################################################################
@@ -94,50 +106,28 @@ gridp = Grid([-2,2], NG, [-2,2], NG, mask=phys)
 
 # evaluate at the target points
 u = np.zeros_like(gridp.xg)
-up = Modified_Helmholtz_Layer_Apply(boundary, gridp, helmholtz_k, dipstr=tau)
+up = Modified_Helmholtz_Layer_Apply(boundary, gridp, helmholtz_k, charge=tau)
 u[phys] = up
 err_plot(up)
 
 ################################################################################
-# correct with close evaluation (preformed)
+# correct with close evaluation (oversampling)
 
-uph = up.copy()
-close_distance = boundary.tolerance_to_distance(1.0e-12)
-close_pts = gridp.find_near_points(boundary, boundary.max_h*5.7)
-close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
-close_corrector = boundary.Get_Close_Corrector('modified_helmholtz', close_trg, 'i', k=helmholtz_k, do_DLP=True)
-close_corrector(uph, tau, close_pts)
-err_plot(uph)
-
-################################################################################
-# correct with pair routines (preformed)
-
-uph = up.copy()
-# to show how much easier the Pairing utility makes things
-pair = Pairing(boundary, gridp, 'i', 1e-12)
-code2 = pair.Setup_Close_Corrector('modified_helmholtz', k=helmholtz_k, do_DLP=True)
-pair.Close_Correction(uph, tau, code2)
-err_plot(uph)
+oversample_factor = 6
+fbdy = GSB(c=sp.signal.resample(boundary.c, oversample_factor*boundary.N))
+ftau = sp.signal.resample(tau, oversample_factor*boundary.N)
+up = Modified_Helmholtz_Layer_Apply(fbdy, gridp, helmholtz_k, charge=ftau, backend='FMM')
+u[phys] = up
+err_plot(up)
 
 ################################################################################
 # check on near boundary grid
 
-adjr = np.arange(10)[::-1]
-adj = 1/10**adjr*boundary.max_h
-close_x = boundary.x - boundary.normal_x*adj[:,None]
-close_y = boundary.y - boundary.normal_y*adj[:,None]
-trg = PointSet(x=close_x.flatten(), y=close_y.flatten())
-
-up = Modified_Helmholtz_Layer_Apply(boundary, trg, helmholtz_k, dipstr=tau)
-uph = up.copy()
-# to show how much easier the Pairing utility makes things
-pair = Pairing(boundary, trg, 'i', 1e-12)
-code2 = pair.Setup_Close_Corrector('modified_helmholtz', k=helmholtz_k, do_DLP=True)
-pair.Close_Correction(uph, tau, code2)
-
-uph = uph.reshape([adjr.shape[0], boundary.N])
+close_x = boundary.x + boundary.max_h*boundary.normal_x
+close_y = boundary.y + boundary.max_h*boundary.normal_y
+trg = PointSet(x=close_x, y=close_y)
+ub = Modified_Helmholtz_Layer_Apply(fbdy, trg, helmholtz_k, charge=ftau, backend='numba')
 ua = solution_func(close_x, close_y)
-print(np.max(np.abs(ua-uph),1))
+err = np.abs(ua-ub)
 
-
-
+print('Error a distance h from the boundary {:0.2e}'.format(err.max()))

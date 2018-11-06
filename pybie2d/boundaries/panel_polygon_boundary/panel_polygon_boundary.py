@@ -8,6 +8,7 @@ from ..boundary import Boundary
 from ...point_set import PointSet
 from ...misc.mkl_sparse import SpMV_viaMKL
 from ...kernels.high_level.laplace import Laplace_Layer_Form
+from ...kernels.high_level.stokes import Stokes_Layer_Form
 
 class Panel_Polygon_Boundary(Boundary):
     """
@@ -184,7 +185,8 @@ class Panel_Polygon_Boundary(Boundary):
                     A -= Laplace_Layer_Form(panel, close_targ, ifdipole=True)
                     A = A.real
                 else:
-                    AS = Stokes_DLP(panel, close_targ)
+                    AS = Stokes_Layer_Form(panel, close_targ, ifdipole=True)
+                    # AS = Stokes_DLP(panel, close_targ)
                     self.Stokes_DLP_MATS.append(AS)
                 self.Close_As.append(A)
                 self.Close_Inds.append(ind)

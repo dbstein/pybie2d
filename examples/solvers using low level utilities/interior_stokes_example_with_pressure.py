@@ -15,7 +15,7 @@ And to give you an idea what is going on under the hood in the
 	higher level routines
 """
 
-N = 100
+N = 200
 
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle
@@ -26,7 +26,10 @@ Stokes_Layer_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Form
 Stokes_Layer_Singular_Form = pybie2d.kernels.high_level.stokes.Stokes_Layer_Singular_Form
 Stokes_Layer_Apply = pybie2d.kernels.high_level.stokes.Stokes_Layer_Apply
 Compensated_Stokes_Form = pybie2d.boundaries.global_smooth_boundary.stokes_close_quad.Compensated_Stokes_Form
+Compensated_Stokes_DLP_Pressure_Form = pybie2d.boundaries.global_smooth_boundary.stokes_close_quad.Compensated_Stokes_DLP_Pressure_Form
+Compensated_Stokes_DLP_Pressure_Apply = pybie2d.boundaries.global_smooth_boundary.stokes_close_quad.Compensated_Stokes_DLP_Pressure_Apply
 Pairing = pybie2d.pairing.Pairing
+Stokes_Pressure_Apply_FMM = pybie2d.kernels.low_level.stokes.Stokes_Pressure_Apply_FMM
 
 ################################################################################
 # define problem
@@ -34,9 +37,19 @@ Pairing = pybie2d.pairing.Pairing
 # boundary
 boundary = GSB(c=squish(N,r=2,b=0.3,rot=np.pi/4.0))
 boundary.add_module('Stokes_Close_Quad')
-# solution
-solution_func_u = lambda x, y: 2*y + x
-solution_func_v = lambda x, y: 0.5*x - y
+def solution_function(x, y):
+	xc = -1.5
+	yc = 1.5
+	xd = x-xc
+	yd = y-yc
+	r = np.sqrt(xd**2 + yd**2)
+	u = -np.log(r) + xd*xd/r**2 + xd*yd/r**2
+	v = -np.log(r) + xd*yd/r**2 + yd*yd/r**2
+	p = xd/r**2 + yd/r**2
+	return u/(4*np.pi), v/(4*np.pi), p/(2*np.pi)
+solution_func_u = lambda x, y: solution_function(x,y)[0]
+solution_func_v = lambda x, y: solution_function(x,y)[1]
+solution_func_p = lambda x, y: solution_function(x,y)[2]
 bcu = solution_func_u(boundary.x, boundary.y)
 bcv = solution_func_v(boundary.x, boundary.y)
 bc = np.concatenate([bcu, bcv])
@@ -80,12 +93,7 @@ ext = full_grid.reshape(ext)
 DLP = Stokes_Layer_Singular_Form(boundary, ifdipole=True)
 A = -0.5*np.eye(2*boundary.N) + DLP
 # fix the nullspace
-Nxx = boundary.normal_x[:,None]*boundary.normal_x*boundary.weights
-Nxy = boundary.normal_x[:,None]*boundary.normal_y*boundary.weights
-Nyx = boundary.normal_y[:,None]*boundary.normal_x*boundary.weights
-Nyy = boundary.normal_y[:,None]*boundary.normal_y*boundary.weights
-NN = np.bmat([[Nxx, Nxy], [Nyx, Nyy]])
-A += NN
+A[:,0] += np.concatenate([boundary.normal_x, boundary.normal_y])
 tau = np.linalg.solve(A, bc)
 
 ################################################################################
@@ -113,7 +121,7 @@ err_plot(vp, solution_func_v)
 uph = up.copy()
 vph = vp.copy()
 # get distance to do close evaluation on from tolerance
-close_distance = boundary.tolerance_to_distance(1e-14)
+close_distance = boundary.tolerance_to_distance(1e-12)
 close_pts = gridp.find_near_points(boundary, close_distance)
 close_trg = PointSet(gridp.x[close_pts], gridp.y[close_pts])
 # generate close eval matrix
@@ -132,90 +140,25 @@ vph[close_pts] += correction[close_trg.N:]
 err_plot(uph, solution_func_u)
 err_plot(vph, solution_func_v)
 
-u[phys] = uph
-v[phys] = vph
-
 ################################################################################
-##### solve problem the easy way ###############################################
-################################################################################
+# Compute the pressure
 
-################################################################################
-# find physical region
+tau_stacked = tau.reshape([2, boundary.N])
+p = Stokes_Pressure_Apply_FMM(boundary.get_stacked_boundary(), gridp.get_stacked_boundary(), dipstr=tau_stacked, dipvec=boundary.get_stacked_normal(), weights=boundary.weights)
+close_mat = Compensated_Stokes_DLP_Pressure_Form(boundary, close_trg, 'i')
+close_eval = close_mat.dot(tau)
+# get constant adjustment
+const_adjustment = close_eval[0] - solution_func_p(gridp.x[close_pts][0], gridp.y[close_pts][0])
+p[close_pts] = close_eval
+p -= const_adjustment
+err_plot(p, solution_func_p)
 
-full_grid = Grid([-2,2], N, [-2,2], N)
-phys, ext = boundary.find_interior_points(full_grid)
-phys = full_grid.reshape(phys)
-ext = full_grid.reshape(ext)
-
-################################################################################
-# solve for the density
-
-st = time.time()
-DLP = Stokes_Layer_Singular_Form(boundary, ifdipole=True)
-Nxx = boundary.normal_x[:,None]*boundary.normal_x*boundary.weights
-Nxy = boundary.normal_x[:,None]*boundary.normal_y*boundary.weights
-Nyx = boundary.normal_y[:,None]*boundary.normal_x*boundary.weights
-Nyy = boundary.normal_y[:,None]*boundary.normal_y*boundary.weights
-NN = np.bmat([[Nxx, Nxy], [Nyx, Nyy]])
-A += NN
-tau = np.linalg.solve(A, bc)
-et = time.time()
-
-################################################################################
-# naive evaluation
-
-# generate a target for the physical grid
-gridp = Grid([-2,2], N, [-2,2], N, mask=phys)
-
-# evaluate at the target points
-Up = Stokes_Layer_Apply(boundary, gridp, dipstr=tau, backend='fly', out_type='stacked')
-
-################################################################################
-# correct with pair routines (on the fly)
-
-Up1 = Up.copy()
-# to show how much easier the Pairing utility makes things
-pair = Pairing(boundary, gridp, 'i', 1e-12)
-code2 = pair.Setup_Close_Corrector(do_DLP=True, kernel='stokes')
-pair.Close_Correction(Up1.ravel(), tau, code2)
-up = Up1[0]
-vp = Up1[1]
-
-err_plot(up, solution_func_u)
-err_plot(vp, solution_func_v)
-
-################################################################################
-# correct with pair routines (preformed)
-
-Up1 = Up.copy()
-# to show how much easier the Pairing utility makes things
-code1 = pair.Setup_Close_Corrector(do_DLP=True, kernel='stokes', backend='preformed')
-pair.Close_Correction(Up1.ravel(), tau, code1)
-
-up = Up1[0]
-vp = Up1[1]
-
-err_plot(up, solution_func_u)
-err_plot(vp, solution_func_v)
-
-################################################################################
-# generate a target that heads up to the boundary
-
-px, py = boundary.x, boundary.y
-nx, ny = boundary.normal_x, boundary.normal_y
-adj = 1.0/10**np.arange(2,16)
-tx = (px - nx*adj[:,None]).flatten()
-ty = (py - ny*adj[:,None]).flatten()
-
-approach_targ = PointSet(tx, ty)
-mat = Compensated_Stokes_Form(boundary, approach_targ, 'i', do_DLP=True).real
-sol = mat.dot(tau)
-sol_u = sol[:approach_targ.N]
-sol_v = sol[approach_targ.N:]
-true_u = solution_func_u(tx, ty)
-true_v = solution_func_v(tx, ty)
-err_u = np.abs(true_u-sol_u)
-err_v = np.abs(true_v-sol_v)
-print('Error approaching boundary in u is: {:0.3e}'.format(err_u.max()))
-print('Error approaching boundary in v is: {:0.3e}'.format(err_v.max()))
+tau_stacked = tau.reshape([2, boundary.N])
+p = Stokes_Pressure_Apply_FMM(boundary.get_stacked_boundary(), gridp.get_stacked_boundary(), dipstr=tau_stacked, dipvec=boundary.get_stacked_normal(), weights=boundary.weights)
+close_eval = Compensated_Stokes_DLP_Pressure_Apply(boundary, close_trg, 'i', tau)
+# get constant adjustment
+const_adjustment = close_eval[0] - solution_func_p(gridp.x[close_pts][0], gridp.y[close_pts][0])
+p[close_pts] = close_eval
+p -= const_adjustment
+err_plot(p, solution_func_p)
 
