@@ -15,6 +15,11 @@ from .modified_helmholtz_slp_self import Modified_Helmholtz_SLP_Self
 from .modified_helmholtz_close_quad import Modified_Helmholtz_Close_Quad
 from .stokes_slp_self_traction import Stokes_SLP_Self_Traction
 
+def my_resample(f, n):
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return sp.signal.resample(f, n)
+
 class Global_Smooth_Boundary(Boundary):
     """
     This class impelements a "global smooth boundary" for use in
@@ -116,7 +121,8 @@ class Global_Smooth_Boundary(Boundary):
     # end get_inside_point function definition
 
     def generate_resampled_boundary(self, new_N):
-        sfc = sp.signal.resample(self.c, new_N)
+        sfc = my_resample(self.c, new_N)
+        # sfc = sp.signal.resample(self.c, new_N)
         return Global_Smooth_Boundary(c=sfc)
     # end generate_resampled_boundary definition
 
