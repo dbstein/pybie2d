@@ -41,7 +41,7 @@ def Modified_Helmholtz_Layer_Apply(source, target=None, k=1.0, charge=None,
     dipvec = None if dipstr is None else source.get_stacked_normal(T=True)
     if target is None:
         target = source
-    backend = get_backend(source.N, source.N, backend)
+    backend = get_backend(source.N, target.N, backend)
     return Modified_Helmholtz_Kernel_Apply(
                 source   = source.get_stacked_boundary(T=True),
                 target   = target.get_stacked_boundary(T=True),

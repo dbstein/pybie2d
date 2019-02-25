@@ -8,6 +8,12 @@ import os
 
 from ...kernels.high_level.stokes import Stokes_Layer_Form, Stokes_Layer_Apply
 
+def my_resample(f, n):
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        return sp.signal.resample(f, n)
+
 class Stokes_Close_Quad(object):
     """
     Module providing Stokes Close Eval based on Globaly Compensated Cauchy Quad
@@ -88,7 +94,7 @@ def Compensated_Stokes_SLP_Pressure_Apply(source, target, side, tau, backend='fl
     taux = tau[:source.N]
     tauy = tau[source.N:]
     tauc = taux + 1j*tauy
-    ftauc = sp.signal.resample(tauc, NF)
+    ftauc = my_resample(tauc, NF)
     sigf = ftauc/fsrc.normal_c
     return fsrc.Laplace_Close_Quad.Apply(target, side, sigf, do_DLP=True, backend=backend)
 
@@ -112,7 +118,7 @@ def Compensated_Stokes_Form(source, target, side, do_DLP=False, do_SLP=False):
         NF = source.Stokes_Close_Quad.NF
         fsrc = source.Stokes_Close_Quad.fsrc
         # construct resampling matrix
-        RS = sp.signal.resample(np.eye(source.N), NF)
+        RS = my_resample(np.eye(source.N), NF)
         # array that takes 2*src.N real density to resampled complex density
         RSMc = RS.dot(Mc)
         FL = source.Stokes_Close_Quad.fsrc.Laplace_Close_Quad.Form(
@@ -151,7 +157,7 @@ def Compensated_Stokes_Apply(source, target, side, tau, do_DLP=False,
     taux = tau[:source.N]
     tauy = tau[source.N:]
     tauc = taux + 1j*tauy
-    ftauc = sp.signal.resample(tauc, NF)
+    ftauc = my_resample(tauc, NF)
     # step 1
     u1 = np.zeros(target.N, dtype=complex)
     if do_DLP:

@@ -38,7 +38,7 @@ def Cauchy_Layer_Apply(source, target=None, dipstr=None, backend='fly'):
     """
     if target is None:
         target = source
-    backend = get_backend(source.N, source.N, backend)
+    backend = get_backend(source.N, target.N, backend)
     return Cauchy_Kernel_Apply(
                 source  = source.c,
                 target  = target.c,
