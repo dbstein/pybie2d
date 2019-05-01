@@ -43,6 +43,43 @@ def _modified_helmoholtz(sx, sy, tx, ty, charge, dipstr, nx, ny, pot, ifcharge, 
                 if ifcharge:
                     pot[i] += _numba_k0(k*r)*charge[j]
 
+@numba.njit(parallel=True)
+def _modified_helmoholtz_grad(sx, sy, tx, ty, ch, nd, nx, ny, k):
+    for i in numba.prange(tx.shape[0]):
+        for j in range(sx.shape[0]):
+            dx = tx[i] - sx[j]
+            dy = ty[i] - sy[j]
+            r = np.sqrt(dx**2 + dy**2)
+            n_dot_d = nx[i]*dx + ny[i]*dy
+            nd[i] -= n_dot_d*k*_numba_k1(k*r)/r*ch[j]
+
+def Modified_Helmholtz_Gradient_Apply_numba(source, target, k, charge, weights, target_dipvec):
+    """
+    Interface to numba-jitted Modified Helmholtz Kernel for Normal Derivative
+    Inputs:
+        source,   required, float(2, ns),  source coordinates
+        target,   required, float(2, nt),  target coordinates
+        k,
+        charge,   optional, float(ns),     charge at source locations
+        weights,  optional, float(ns),     quadrature weights
+        target_dipvec
+    Outputs:
+        float(nt), normal-derivative at target coordinates
+    ns = number of source points; nt = number of target points
+    """
+    weights = 1.0 if weights is None else weights
+    weighted_weights = 0.5*weights/np.pi
+    sx = source[0]
+    sy = source[1]
+    tx = target[0]
+    ty = target[1]
+    nd = np.zeros(target.shape[1], dtype=float)
+    ch = charge*weighted_weights
+    nx = target_dipvec[0]
+    ny = target_dipvec[1]
+    _modified_helmoholtz_grad(sx, sy, tx, ty, ch, nd, nx, ny, k)
+    return nd
+
 def Modified_Helmholtz_Kernel_Apply_numba(source, target, k=1.0, charge=None,
                                         dipstr=None, dipvec=None, weights=None):
     """
