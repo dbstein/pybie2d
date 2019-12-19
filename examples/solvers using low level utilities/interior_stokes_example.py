@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.path
 plt.ion()
 import pybie2d
+import time
 
 """
 Demonstrate how to use the pybie2d package to solve an interior Stokes problem

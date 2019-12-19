@@ -28,6 +28,7 @@ class Stokes_Close_Quad(object):
         GSB.add_module('Laplace_Close_Quad')
         self.NF = int(np.ceil(2.2*self.boundary.N)/2.0)*2
         self.fsrc = self.boundary.generate_resampled_boundary(self.NF)
+        self.fsrc.set_inside_point(GSB.get_inside_point())
         self.fsrc.add_module('Laplace_Close_Quad')
 
     def Get_Close_Corrector(self, target, side, do_DLP=False, do_SLP=False, backend='fly'):

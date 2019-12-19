@@ -21,7 +21,7 @@ And to give you an idea what is going on under the hood in the
 
 NB = 200
 NG = 200
-helmholtz_k = 2.0
+helmholtz_k = 1.0
 
 # extract some functions for easy calling
 squish = pybie2d.misc.curve_descriptions.squished_circle

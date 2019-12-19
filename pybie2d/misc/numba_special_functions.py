@@ -303,6 +303,26 @@ def numba_k1(x):
         out[i] = _numba_k1(x[i])
     return out.reshape(sh)
 
+@numba.njit(parallel=True)
+def numba_h1_0(x):
+    sh = x.shape
+    N = np.prod(np.array(sh))
+    x = x.ravel()
+    out = np.empty_like(x)
+    for i in numba.prange(N):
+        out[i] = _numba_h1_0(x[i])
+    return out.reshape(sh)
+
+@numba.njit(parallel=True)
+def numba_h1_1(x):
+    sh = x.shape
+    N = np.prod(np.array(sh))
+    x = x.ravel()
+    out = np.empty_like(x)
+    for i in numba.prange(N):
+        out[i] = _numba_h1_1(x[i])
+    return out.reshape(sh)
+
 @numba.njit()
 def _numba_i0(x):
     """
@@ -375,3 +395,17 @@ def _numba_chbevl(x, coefs):
         b1 = b0
         b0 = x*b1 - b2 + coefs[i]
     return 0.5*(b0-b2)
+
+# Hankel1 Function
+
+h0_const = -2j/np.pi
+h1_const = -2/np.pi
+
+@numba.njit()
+def _numba_h1_0(x):
+    return h0_const*_numba_k0(-1j*x)
+
+@numba.njit()
+def _numba_h1_1(x):
+    return h1_const*_numba_k1(-1j*x)
+
