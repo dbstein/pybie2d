@@ -42,7 +42,7 @@ def get_backend(n_source, n_target, backend='fly'):
     if backend is 'fly':
         backend = get_backend_internal(size)
     else:
-        if backend not in ('numba', 'FMM'):
+        if backend not in ('numba', 'FMM', 'KIFMM'):
             raise Exception("Requested backend '" + backend + "' is not an implemented backend.")
         if backend == 'FMM' and not have_fmm:
             raise Exception('FMM backend requested but not found.')

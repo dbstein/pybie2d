@@ -7,6 +7,11 @@ from ... import have_fmm
 if have_fmm:
     from ... import FMM
 
+try:
+    from flexmm.kifmm2d.scalar.fmm import FMM as KI_FMM
+except:
+    pass
+
 ################################################################################
 # General Purpose Low Level Source --> Target Kernel Apply Functions
 
@@ -201,12 +206,32 @@ def Laplace_Kernel_Apply_FMM(source, target, charge=None, dipstr=None,
     else:
         return out['u']
 
+@numba.njit(fastmath=True)
+def Laplace_Eval(sx, sy, tx, ty):
+    dx = tx-sx
+    dy = ty-sy
+    d2 = dx*dx + dy*dy
+    scale = -0.25/np.pi
+    return scale*np.log(d2)
+def Laplace_Kernel_Apply_KIFMM(source, target, charge=None, dipstr=None,
+                                    dipvec=None, weights=None, gradient=False, **kwargs):
+    Nequiv  = kwargs.get( 'Nequiv',  50   )
+    Ncutoff = kwargs.get( 'Ncutoff', 50   )
+    bbox    = kwargs.get( 'bbox',    None )
+    FMM = KI_FMM(source[0], source[1], Laplace_Eval, Ncutoff, Nequiv, bbox=bbox)
+    FMM.build_expansions(charge*weights)
+    if source is target:
+        return FMM.source_evaluation(source[0], source[1])[0]
+    else:
+        return FMM.source_evaluation(target[0], target[1])[0]
+
 Laplace_Kernel_Applys = {}
 Laplace_Kernel_Applys['numba'] = Laplace_Kernel_Apply_numba
 Laplace_Kernel_Applys['FMM']   = Laplace_Kernel_Apply_FMM
+Laplace_Kernel_Applys['KIFMM'] = Laplace_Kernel_Apply_KIFMM
 
 def Laplace_Kernel_Apply(source, target, charge=None, dipstr=None, dipvec=None,
-                                weights=None, gradient=False, backend='numba'):
+                                weights=None, gradient=False, backend='numba', **kwargs):
     """
     Laplace Kernel Apply
     Inputs:
@@ -229,7 +254,7 @@ def Laplace_Kernel_Apply(source, target, charge=None, dipstr=None, dipvec=None,
     ns = number of source points; nt = number of target points
     """
     return Laplace_Kernel_Applys[backend](source, target, charge, dipstr,
-                                                    dipvec, weights, gradient)
+                                                    dipvec, weights, gradient, **kwargs)
 
 ################################################################################
 # General Purpose Low Level Source --> Target Kernel Formation

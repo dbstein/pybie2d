@@ -32,12 +32,12 @@ class PointSet(object):
         """
         if x is not None and y is not None:
             self.shape = x.shape
-            self.x = x.flatten()
-            self.y = y.flatten()
+            self.x = x.ravel()
+            self.y = y.ravel()
             self.c = self.x + 1j*self.y
         elif c is not None:
             self.shape = c.shape
-            self.c = c.flatten()
+            self.c = c.ravel()
             self.x = self.c.real
             self.y = self.c.imag
         else:

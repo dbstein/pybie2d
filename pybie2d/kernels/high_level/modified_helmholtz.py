@@ -19,7 +19,7 @@ from ..low_level.modified_helmholtz import Modified_Helmholtz_Kernel_Form
 # Applies
 
 def Modified_Helmholtz_Layer_Apply(source, target=None, k=1.0, charge=None,
-                                                    dipstr=None, backend='fly'):
+                                                    dipstr=None, backend='fly', **kwargs):
     """
     Laplace Layer Apply (potential and gradient) in 2D
     Computes the sum:
@@ -51,6 +51,7 @@ def Modified_Helmholtz_Layer_Apply(source, target=None, k=1.0, charge=None,
                 dipvec   = dipvec,
                 weights  = source.weights,
                 backend  = backend,
+                **kwargs,
             )
 
 ################################################################################

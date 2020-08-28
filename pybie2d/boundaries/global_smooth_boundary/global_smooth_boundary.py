@@ -54,6 +54,7 @@ class Global_Smooth_Boundary(Boundary):
         self.t, self.dt = np.linspace(0, 2*np.pi, self.N, \
                                                 endpoint=False, retstep=True)
         self.k = np.fft.fftfreq(self.N, self.dt/(2.0*np.pi)) # fourier modes
+        self.k[int(self.N/2)] = 0.0 # wipe out nyquist frequency
         self.ik = 1j*self.k
         self.chat = np.fft.fft(self.c)
         self.cp = np.fft.ifft(self.chat*self.ik)

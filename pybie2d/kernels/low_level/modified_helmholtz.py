@@ -4,11 +4,17 @@ import numba
 import scipy as sp
 import scipy.special
 import warnings
+from flexmm.kifmm2d.float_dict import FloatDict
 
 from ... import have_fmm
 if have_fmm:
     from ... import FMM
 from ...misc.numba_special_functions import _numba_k0, _numba_k1, numba_k0, numba_k1
+
+try:
+    from flexmm.kifmm2d.scalar.fmm import FMM as KI_FMM
+except:
+    pass
 
 ################################################################################
 # Greens function and derivative for Modified Helmholtz Equation
@@ -141,12 +147,58 @@ def Modified_Helmholtz_Kernel_Apply_FMM(source, target, k, charge=None,
                     helmholtz_parameter=1j*k)['target']
     return out['u'].real
 
+MH_eval_functions = FloatDict()
+def get_MH_Eval(k):
+    if k not in MH_eval_functions:
+        try:
+            print('trying fast')
+            from function_generator import FunctionGenerator
+            from scipy.special import k0
+            fast_k0 = FunctionGenerator(k0, 0.0, 1000.0, tol=1e-14, verbose=True)
+            _fast_k0 = fast_k0.get_base_function(check=False)
+            @numba.njit(fastmath=True)
+            def func(sx, sy, tx, ty):
+                dx = tx-sx
+                dy = ty-sy
+                d = np.sqrt(dx*dx + dy*dy)
+                return _fast_k0(k*d)
+            print('fast success')
+        except:
+            @numba.njit(fastmath=True)
+            def func(sx, sy, tx, ty):
+                dx = tx-sx
+                dy = ty-sy
+                d = np.sqrt(dx*dx + dy*dy)
+                return _numba_k0(k*d)
+        MH_eval_functions[k] = func
+    return MH_eval_functions[k]
+
+def Modified_Helmholtz_Kernel_Apply_KIFMM(source, target, k, charge=None,
+                            dipstr=None, dipvec=None, weights=None, **kwargs):
+    Nequiv  = kwargs.get( 'Nequiv',  50   )
+    Ncutoff = kwargs.get( 'Ncutoff', 50   )
+    bbox    = kwargs.get( 'bbox',    None )
+    if bbox is None:
+        xmin = min(source[0].min(), target[0].min())
+        xmax = max(source[0].max(), target[0].max())
+        ymin = min(source[1].min(), target[1].min())
+        ymax = max(source[1].max(), target[1].max())
+        bbox = [xmin, xmax, ymin, ymax]
+    MH_Eval = get_MH_Eval(k)
+    FMM = KI_FMM(source[0], source[1], MH_Eval, Ncutoff, Nequiv, bbox=bbox)
+    FMM.build_expansions(charge*weights*0.5/np.pi)
+    if source is target:
+        return FMM.source_evaluation(source[0], source[1])[0]
+    else:
+        return FMM.source_evaluation(target[0], target[1])[0]
+
 Modified_Helmholtz_Kernel_Applys = {}
 Modified_Helmholtz_Kernel_Applys['numba'] = Modified_Helmholtz_Kernel_Apply_numba
 Modified_Helmholtz_Kernel_Applys['FMM']   = Modified_Helmholtz_Kernel_Apply_FMM
+Modified_Helmholtz_Kernel_Applys['KIFMM']   = Modified_Helmholtz_Kernel_Apply_KIFMM
 
 def Modified_Helmholtz_Kernel_Apply(source, target, k, charge=None, dipstr=None, dipvec=None,
-                                weights=None, gradient=False, backend='numba'):
+                                weights=None, gradient=False, backend='numba', **kwargs):
     """
     Laplace Kernel Apply
     Inputs:

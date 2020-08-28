@@ -28,6 +28,7 @@ class Laplace_SLP_Self_Kress(object):
         self.V1_hat = np.fft.fft(self.V1)
         v2 = np.abs(self.boundary.k)
         v2[0] = np.Inf
+        v2[int(N/2)] = np.Inf # experimental!
         self.IV = 1.0/v2
         self.V2 = 0.5*np.fft.ifft(self.IV).real/dt
         self.V2_hat = 0.5*self.IV/dt

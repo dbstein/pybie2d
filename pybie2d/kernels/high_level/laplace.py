@@ -18,7 +18,7 @@ from ..low_level.laplace import Laplace_Kernel_Apply, Laplace_Kernel_Form
 # Applies
 
 def Laplace_Layer_Apply(source, target=None, charge=None, dipstr=None,
-                                                gradient=False, backend='fly'):
+                                                gradient=False, backend='fly', **kwargs):
     """
     Laplace Layer Apply (potential and gradient) in 2D
     Computes the sum:
@@ -52,6 +52,7 @@ def Laplace_Layer_Apply(source, target=None, charge=None, dipstr=None,
                 weights  = source.weights,
                 gradient = gradient,
                 backend  = backend,
+                **kwargs,
             )
 
 def Laplace_Layer_Singular_Apply(source, charge=None, dipstr=None,
