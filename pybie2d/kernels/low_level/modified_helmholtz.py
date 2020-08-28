@@ -4,7 +4,6 @@ import numba
 import scipy as sp
 import scipy.special
 import warnings
-from flexmm.kifmm2d.float_dict import FloatDict
 
 from ... import have_fmm
 if have_fmm:
@@ -12,6 +11,7 @@ if have_fmm:
 from ...misc.numba_special_functions import _numba_k0, _numba_k1, numba_k0, numba_k1
 
 try:
+    from flexmm.kifmm2d.float_dict import FloatDict
     from flexmm.kifmm2d.scalar.fmm import FMM as KI_FMM
 except:
     pass
@@ -147,7 +147,10 @@ def Modified_Helmholtz_Kernel_Apply_FMM(source, target, k, charge=None,
                     helmholtz_parameter=1j*k)['target']
     return out['u'].real
 
-MH_eval_functions = FloatDict()
+try:
+    MH_eval_functions = FloatDict()
+except:
+    pass
 def get_MH_Eval(k):
     if k not in MH_eval_functions:
         try:
