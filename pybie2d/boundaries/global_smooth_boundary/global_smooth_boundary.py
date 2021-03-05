@@ -164,6 +164,12 @@ class Global_Smooth_Boundary(Boundary):
         self.add_module('Modified_Helmholtz_SLP_Self')
         return self.Modified_Helmholtz_SLP_Self.Form(*args, **kwargs)
 
+    # generate Minimum Global Smooth Boundary based on first point
+    # this is very useful for Circulant problems
+    def Generate_1pt_Circulant_Boundary(self):
+        return Minimal_Global_Smooth_Boundary(self.c[0], self.normal_c[0], 
+                    self.weights[0], self.curvature[0])
+
     ###### Method for generating close corrections
     def tolerance_to_distance(self, tol):
         """
@@ -196,3 +202,19 @@ class Global_Smooth_Boundary(Boundary):
         test_value = np.sum(self.complex_weights/(self.c-candidate))
         return np.abs(test_value - 2.0j*np.pi) < eps
     # end _test_inside_point function
+
+def arr_check(x):
+    if type(x) != np.ndarray:
+        x = np.array([x,])
+    return x
+class Minimal_Global_Smooth_Boundary(Global_Smooth_Boundary):
+    def __init__(self, c, normal_c, weights, curvature):
+        self.c = arr_check(c)
+        self.N = self.c.size
+        self.normal_c = arr_check(normal_c)
+        self.weights = arr_check(weights)
+        self.curvature = arr_check(curvature)
+        self.x = self.c.real
+        self.y = self.c.imag
+        self.normal_x = self.normal_c.real
+        self.normal_y = self.normal_c.imag

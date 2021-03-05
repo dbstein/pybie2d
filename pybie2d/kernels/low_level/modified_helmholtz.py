@@ -8,7 +8,11 @@ import warnings
 from ... import have_fmm
 if have_fmm:
     from ... import FMM
-from ...misc.numba_special_functions import _numba_k0, _numba_k1, numba_k0, numba_k1
+# from ...misc.numba_special_functions import _numba_k0, _numba_k1, numba_k0, numba_k1
+from ...misc.function_generator_functions import _fg_k0 as _numba_k0
+from ...misc.function_generator_functions import _fg_k1 as _numba_k1
+from ...misc.function_generator_functions import fg_k0 as numba_k0
+from ...misc.function_generator_functions import fg_k1 as numba_k1
 
 try:
     from flexmm.kifmm2d.float_dict import FloatDict

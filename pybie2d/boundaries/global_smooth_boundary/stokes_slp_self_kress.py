@@ -67,17 +67,37 @@ def Stokes_SLP_Self_Kress_Form(source):
     A11 = ne.evaluate('A11 + muS', out=A[N:,N:])
     return A
 
+# CORRECT BUT MAY NEED MODIFICATION TO WORK HERE!
 def Stokes_SLP_Self_Kress_Apply(source, tau, backend='fly'):
     mu = 1.0
     N = source.N
-    weights = source.weights
+    u1 = Stokes_Layer_Apply(source, forces=tau, backend=backend)
+    # correction for diagonal
     tx = source.tangent_x
     ty = source.tangent_y
-    u1 = Stokes_Layer_Apply(source, charge=tau, backend=backend)
-    diag1 = weights*tx*tx*tau[:N] + weights*tx*ty*tau[N:]
-    diag2 = weights*tx*ty*tau[:N] + weights*ty*ty*tau[N:]
-    u2 = np.concatenate([diag1, diag2])
-    S1 = source.Laplace_SLP_Self_Kress.Apply(tau[:source.N], backend)
-    S2 = source.Laplace_SLP_Self_Kress.Apply(tau[source.N:], backend)
+    wtx = source.weights*(tx*tau[:N] + ty*tau[N:])
+    u2 = np.concatenate([tx*wtx, ty*wtx])
+    # correction for singular part
+    S1 = Laplace_SLP_Self_Kress_Apply(bdy, tau[:source.N], backend)
+    S2 = Laplace_SLP_Self_Kress_Apply(bdy, tau[source.N:], backend)
     u3 = np.concatenate([S1, S2])
-    return u1 + u2 + 0.5*mu*u3
+    S1 = Laplace_Layer_Apply(source, source, charge=tau[:source.N], backend=backend)
+    S2 = Laplace_Layer_Apply(source, source, charge=tau[source.N:], backend=backend)
+    u4 = np.concatenate([S1, S2])
+    return u1 + u2/(4*np.pi*mu) + 0.5*mu*(u3-u4)
+
+# THIS IS INCORRECT!
+# def Stokes_SLP_Self_Kress_Apply(source, tau, backend='fly'):
+#     mu = 1.0
+#     N = source.N
+#     weights = source.weights
+#     tx = source.tangent_x
+#     ty = source.tangent_y
+#     u1 = Stokes_Layer_Apply(source, charge=tau, backend=backend)
+#     diag1 = weights*tx*tx*tau[:N] + weights*tx*ty*tau[N:]
+#     diag2 = weights*tx*ty*tau[:N] + weights*ty*ty*tau[N:]
+#     u2 = np.concatenate([diag1, diag2])
+#     S1 = source.Laplace_SLP_Self_Kress.Apply(tau[:source.N], backend)
+#     S2 = source.Laplace_SLP_Self_Kress.Apply(tau[source.N:], backend)
+#     u3 = np.concatenate([S1, S2])
+#     return u1 + u2 + 0.5*mu*u3
