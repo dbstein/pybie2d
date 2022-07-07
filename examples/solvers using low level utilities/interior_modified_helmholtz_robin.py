@@ -36,6 +36,10 @@ Modified_Helmholtz_Layer_Apply = pybie2d.kernels.high_level.modified_helmholtz.M
 ################################################################################
 # define problem
 
+# robin constants (αu + βu_n)
+α = 2
+β = 0.5
+
 # boundary
 boundary = GSB(c=squish(NB,r=2,b=0.3,rot=np.pi/4.0))
 # solution
@@ -50,7 +54,11 @@ def _solution_func_dn(x, y, nx, ny):
 	r = np.sqrt(dx**2 + dy**2)
 	dd = helmholtz_k*k1(helmholtz_k*r)/(2*np.pi*r)
 	return (nx*dx+ny*dy)*dd
-bc = _solution_func_dn(boundary.x, boundary.y, boundary.normal_x, boundary.normal_y)
+def boundary_condition(x, y, nx, ny):
+	bcu = _solution_func(x, y)
+	bcun = _solution_func_dn(boundary.x, boundary.y, boundary.normal_x, boundary.normal_y)
+	return α*bcu + β*bcun
+bc = boundary_condition(boundary.x, boundary.y, boundary.normal_x, boundary.normal_y)
 bcmax = np.abs(bc).max()
 bc /= bcmax
 def solution_func(x, y):
@@ -92,9 +100,10 @@ ext = full_grid.reshape(ext)
 ################################################################################
 # solve for the density
 
+SLP = boundary.Modified_Helmholtz_SLP_Self_Form(helmholtz_k)
 DLP = boundary.Modified_Helmholtz_DLP_Self_Form(helmholtz_k)
 SLPp = -(DLP/boundary.weights).T*boundary.weights
-A = -0.5*np.eye(boundary.N) + SLPp
+A = α*SLP + β*(-0.5*np.eye(boundary.N) + SLPp)
 tau = np.linalg.solve(A, bc)
 
 ################################################################################

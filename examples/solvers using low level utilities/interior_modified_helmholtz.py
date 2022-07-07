@@ -15,7 +15,7 @@ And to give you an idea what is going on under the hood in the
 	higher level routines
 """
 
-NB = 500
+NB = 700
 NG = 100
 helmholtz_k = 10.0
 
@@ -39,7 +39,7 @@ def _solution_func(x, y):
 	dx = x - (-0.5)
 	dy = y - 1.0
 	r = np.sqrt(dx**2 + dy**2)
-	return helmholtz_k**2*k0(helmholtz_k*r)/(2*np.pi)
+	return k0(helmholtz_k*r)/(2*np.pi)
 bc = _solution_func(boundary.x, boundary.y)
 bcmax = bc.max()
 bc /= bcmax
@@ -83,7 +83,7 @@ ext = full_grid.reshape(ext)
 # solve for the density
 
 DLP = boundary.Modified_Helmholtz_DLP_Self_Form(helmholtz_k)
-A = -0.5*np.eye(boundary.N)*helmholtz_k**2 + DLP
+A = -0.5*np.eye(boundary.N) + DLP
 tau = np.linalg.solve(A, bc)
 
 ################################################################################

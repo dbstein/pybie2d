@@ -9,7 +9,7 @@ import os
 
 from ...kernels.high_level.laplace import Laplace_Layer_Form
 from .laplace_close_quad import Compensated_Laplace_Form
-from ...misc.numba_special_functions import numba_k0, numba_k1, numba_i0, numba_i1, _numba_i0
+from ...misc.numba_special_functions import numba_k0, numba_k1, numba_i0, numba_i1, _numba_i0, _numba_i1
 
 class Modified_Helmholtz_Close_Quad(object):
     """

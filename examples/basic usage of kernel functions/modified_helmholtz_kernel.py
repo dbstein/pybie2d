@@ -4,26 +4,37 @@ import time
 import pybie2d
 from pybie2d.kernels.high_level.modified_helmholtz import Modified_Helmholtz_Kernel_Apply, Modified_Helmholtz_Kernel_Form
 from pybie2d.misc.numba_special_functions import numba_k0, numba_k1
+from pybie2d.misc.function_generator_functions import fg_k0, fg_k1
 
 print('\n-- Testing numba special function implementation --\n')
+
 # test the underlying numba implementations of i0, k0
-x = np.linspace(0,100,10000)
+# function generator versions give good relative error up to x=200, then good absolute error
+x = np.linspace(0,100,1000000)
 
 y1 = k0(x)
 y2 = numba_k0(x)
+y3 = fg_k0(x)
 print('Timing scipy k0')
-%timeit k0(x)
+st=time.time(); k0(x); print('   (ms): {:0.2f}'.format((time.time()-st)*1000))
 print('Timing numba k0')
-%timeit numba_k0(x)
-print('Max relative difference in k0: {:0.2e}'.format(np.abs((y1[1:]-y2[1:])/y1[1:]).max()))
+st=time.time(); numba_k0(x); print('   (ms): {:0.2f}'.format((time.time()-st)*1000))
+print('Timing function generator k0')
+st=time.time(); fg_k0(x); print('   (ms): {:0.2f}'.format((time.time()-st)*1000))
+print('Max relative difference in k0 (numba--scipy): {:0.2e}'.format(np.abs((y1[1:]-y2[1:])/np.abs(y1[1:])).max()))
+print('Max relative difference in k1 (funcg--scipy): {:0.2e}'.format(np.abs((y1[1:]-y3[1:])/np.abs(y1[1:])).max()))
 
 y1 = k1(x)
 y2 = numba_k1(x)
-print('\nTiming scipy k1')
-%timeit k1(x)
+y3 = fg_k1(x)
+print('Timing scipy k1')
+st=time.time(); k1(x); print('   (ms): {:0.2f}'.format((time.time()-st)*1000))
 print('Timing numba k1')
-%timeit numba_k1(x)
-print('Max relative difference in k1: {:0.2e}'.format(np.abs((y1[1:]-y2[1:])/y1[1:]).max()))
+st=time.time(); numba_k1(x); print('   (ms): {:0.2f}'.format((time.time()-st)*1000))
+print('Timing function generator k1')
+st=time.time(); fg_k1(x); print('   (ms): {:0.2f}'.format((time.time()-st)*1000))
+print('Max relative difference in k0 (numba--scipy): {:0.2e}'.format(np.abs((y1[1:]-y2[1:])/np.abs(y1[1:])).max()))
+print('Max adj rel  difference in k1 (funcg--scipy): {:0.2e}'.format(np.abs((y1[1:]-y3[1:])/np.abs(y1[1:]+1)).max()))
 
 """
 Demonstrate usage of the basic Laplace Kernels

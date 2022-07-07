@@ -1,8 +1,12 @@
 import numpy as np
 import scipy.sparse as sparse
 from ctypes import POINTER,c_void_p,c_int,c_char,c_double,byref,cdll
+import platform
 try:
-    mkl = cdll.LoadLibrary("libmkl_rt.so")
+    if platform.system() == 'Darwin':
+        mkl = cdll.LoadLibrary("libmkl_rt.dylib")
+    else:
+        mkl = cdll.LoadLibrary("libmkl_rt.so")
     mkl_is_here = True
 except:
     mkl_is_here = False
@@ -18,10 +22,10 @@ if mkl_is_here:
         stephen.beckr@gmail.com
         """
 
-        import numpy as np
-        import scipy.sparse as sparse
-        from ctypes import POINTER,c_void_p,c_int,c_char,c_double,byref,cdll
-        mkl = cdll.LoadLibrary("libmkl_rt.so")
+        # import numpy as np
+        # import scipy.sparse as sparse
+        # from ctypes import POINTER,c_void_p,c_int,c_char,c_double,byref,cdll
+        # mkl = cdll.LoadLibrary("libmkl_rt.so")
 
         SpMV = mkl.mkl_cspblas_dcsrgemv
         # Dissecting the "cspblas_dcsrgemv" name:

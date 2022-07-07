@@ -127,7 +127,7 @@ def Stokes_Layer_Form(source, target=None, ifforce=False, fweight=None,
     If source is target, this function computes a naive quadrature,
         ignoring the i=j term in the sum
     """
-    dipvec = None if ifdipole is None else source.get_stacked_normal(T=True)
+    dipvec = None if not ifdipole else source.get_stacked_normal(T=True)
     if target is None:
         target = source
     return Stokes_Kernel_Form(
