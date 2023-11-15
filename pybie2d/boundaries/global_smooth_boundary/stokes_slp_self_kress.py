@@ -25,7 +25,7 @@ class Stokes_SLP_Self_Kress(object):
         return self.MAT
 
     def Apply(self, tau, backend='fly'):
-        if backend is 'preformed':
+        if backend == 'preformed':
             self.Form()
             return self.MAT.dot(tau)
         else:

@@ -61,10 +61,10 @@ class BoundaryCollection(Boundary):
                   'scaled_speed', 'scaled_cp', 'curvature', 'complex_weights')
         for field in fields:
             code = 'self.' + field + \
-                    ' = np.array([b.' + field + ' for b in self.boundaries])'
+                    ' = np.concatenate([b.' + field + ' for b in self.boundaries])'
             exec(code)
-            code = 'self.' + field + ' = np.concatenate(self.' + field + ')'
-            exec(code)
+            # code = 'self.' + field + ' = np.concatenate(self.' + field + ')'
+            # exec(code)
         # self.stacked_boundary = np.column_stack([self.x, self.y])
         # self.stacked_boundary_T = self.stacked_boundary.T
         # self.stacked_normal = np.column_stack([self.normal_x, self.normal_y])
